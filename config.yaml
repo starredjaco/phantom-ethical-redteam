@@ -2,13 +2,16 @@
 
 anthropic_api_key: "sk-ant-key-claude-here"   # ← Replace with your Anthropic key
 
-model: "claude-3-5-sonnet-20241022"          # ou claude-3-opus
+model: "claude-3-5-sonnet-20241022"          # or claude-3-opus
 max_tokens: 8192
-temperature: 0.0                             # 0 = maximum précision & reproductibilité
+temperature: 0.0                             # 0 = maximum precision & reproduction
 
-# Dossiers
+# Folders
 log_dir: "logs"
 scope_file: "scopes/current_scope.md"
 
 # Mode debug (True = displays everything, False = only final results)
 debug: true
+autonomous: true
+max_autonomous_turns: 50          # security anti-loop
+pause_every_n_turns: 10           # every 10 actions, it shows a resume and asks if you want to continue
