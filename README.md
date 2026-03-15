@@ -43,7 +43,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ### Context
 
-You are a red teamer hired to test the security of `https://app.acme-corp.com`.
+You are a red teamer hired to test the security of `https://someth1ng.com`.
 The client has signed a Rules of Engagement document. The scope is limited to this domain and its subdomains.
 
 ### Step 1 — Define the scope
@@ -51,9 +51,9 @@ The client has signed a Rules of Engagement document. The scope is limited to th
 Edit `scopes/current_scope.md`:
 
 ```markdown
-**Scope autorisé :** https://app.acme-corp.com
+**Scope autorisé :** https://someth1ng.com
 
-**Subdomains in scope:** *.acme-corp.com
+**Subdomains in scope:** *.someth1ng.com
 
 **Autorisation :** Pentest contract signed 2026-03-15 — full web application test
 ```
@@ -67,7 +67,7 @@ python agent/main.py
 ```
 🚀 Phantom - Claude Ethical RedTeam v1.0
 Mode : AUTONOME TOTAL
-Scope : https://app.acme-corp.com — Pentest contract signed 2026-03-15...
+Scope : https://someth1ng.com — Pentest contract signed 2026-03-15...
 ```
 
 ### Step 3 — Phantom reasons and acts autonomously
@@ -75,7 +75,7 @@ Scope : https://app.acme-corp.com — Pentest contract signed 2026-03-15...
 Phantom works through the standard kill chain, narrating every decision:
 
 ```
-🤖 Phantom : Starting mission on https://app.acme-corp.com.
+🤖 Phantom : Starting mission on https://someth1ng.com.
   Result obtained: scope confirmed.
   Analysis: I will begin with passive recon before any active scan.
   Next optimal action: run_recon on the target.
@@ -90,7 +90,7 @@ Phantom works through the standard kill chain, narrating every decision:
   Reason: high probability of CVE hits before any brute-force or injection.
 
 🔧 Execution : run_nuclei
-→ Target: https://app.acme-corp.com, templates: http/cves, severity: critical
+→ Target: https://someth1ng.com, templates: http/cves, severity: critical
 
 🤖 Phantom : Result obtained: 3 findings — CVE-2023-2745 (path traversal),
   CVE-2022-3590 (SSRF via pingback), misconfigured xmlrpc.php.
@@ -102,8 +102,8 @@ Phantom works through the standard kill chain, narrating every decision:
 → Discovered: /admin, /wp-login.php, /api/v1/users, /backup.zip
 
 🔧 Execution : run_sqlmap
-→ Target: https://app.acme-corp.com/api/v1/users?id=1
-→ Injection found: UNION-based, 4 columns — database: acme_prod
+→ Target: https://someth1ng.com/api/v1/users?id=1
+→ Injection found: UNION-based, 4 columns — database: someth1ng_prod
 ```
 
 After 10 turns, Phantom pauses:
@@ -123,11 +123,11 @@ You review the logs in `logs/agent.log`, then press Enter to continue — or typ
 === MISSION COMPLETE ===
 
 **Executive Summary**
-app.acme-corp.com presents 3 critical vulnerabilities exploitable without authentication.
+app.someth1ng.com presents 3 critical vulnerabilities exploitable without authentication.
 
 **Critical findings**
 1. CVE-2023-2745 — WordPress path traversal → arbitrary file read (PoC: /wp-admin/?action=..&page=../../../etc/passwd)
-2. SQL injection on /api/v1/users?id= → full database dump (acme_prod, 12 tables, 4 200 users)
+2. SQL injection on /api/v1/users?id= → full database dump (someth1ng_prod, 12 tables, 4 200 users)
 3. /backup.zip publicly accessible → contains database credentials in plaintext
 
 **Recommendations**
