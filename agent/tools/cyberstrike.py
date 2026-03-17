@@ -1,8 +1,14 @@
+import os
+import platform
 import subprocess
 
+
 def run(target: str, role: str = "redteam", skill: str = "full-scan") -> str:
-    binary = "bin/cyberstrike"
-    cmd = [binary, "--target", target, "--role", role, "--skill", skill, "--output", "logs/cyberstrike.json"]
+    binary = os.path.join("bin", "cyberstrike")
+    if platform.system() == "Windows":
+        binary += ".exe"
+    output_path = os.path.join("logs", "cyberstrike.json")
+    cmd = [binary, "--target", target, "--role", role, "--skill", skill, "--output", output_path]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         return f"✅ CyberStrikeAI done (role={role})\n{result.stdout[-400:]}"

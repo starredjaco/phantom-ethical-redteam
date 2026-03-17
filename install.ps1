@@ -82,7 +82,8 @@ function Test-LLMConnection {
             }
             "gemini" {
                 $body = '{"contents":[{"parts":[{"text":"hi"}]}]}'
-                $r = Invoke-WebRequest -Uri "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$ApiKey" -Method POST -Headers $headers -Body $body -UseBasicParsing -ErrorAction Stop
+                $uri = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$ApiKey"
+                $r = Invoke-WebRequest -Uri $uri -Method POST -Headers $headers -Body $body -UseBasicParsing -ErrorAction Stop
             }
             "mistral" {
                 $headers["Authorization"] = "Bearer $ApiKey"

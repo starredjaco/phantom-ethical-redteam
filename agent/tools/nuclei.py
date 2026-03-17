@@ -1,11 +1,13 @@
+import os
 import subprocess
 import json
 
 
 def run(target: str, templates: str = "http/cves", severity: str = "critical") -> str:
+    output_path = os.path.join("logs", "nuclei.json")
     cmd = [
         "nuclei", "-u", target, "-t", templates,
-        "-severity", severity, "-json", "-silent", "-o", "logs/nuclei.json",
+        "-severity", severity, "-json", "-silent", "-o", output_path,
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)

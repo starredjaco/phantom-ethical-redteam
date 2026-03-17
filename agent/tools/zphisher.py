@@ -1,11 +1,14 @@
 import os
 
+
 def run(target: str, template: str = "instagram") -> str:
-    template_path = "tools/zphisher_repo/sites/" + template
+    template_path = os.path.join("tools", "zphisher_repo", "sites", template)
     if not os.path.exists(template_path):
         return "❌ Template Zphisher not found. Use a valid template (instagram, facebook...)"
-    template_content = "Template Zphisher loaded (ethical) :\n" + open(template_path + "/login.html", errors="ignore").read()[:500]
-    return f"✅ Template {template} for {target} generate (NO REAL SEND POSSIBLE)\n{template_content}"
+    login_file = os.path.join(template_path, "login.html")
+    with open(login_file, errors="ignore") as f:
+        template_content = "Template Zphisher loaded (ethical) :\n" + f.read()[:500]
+    return f"✅ Template {template} for {target} generated (NO REAL SEND POSSIBLE)\n{template_content}"
 
 TOOL_SPEC = {
     "name": "generate_zphisher_template",

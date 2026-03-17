@@ -1,7 +1,10 @@
+import os
 import subprocess
 
+
 def run(url: str, level: int = 3, risk: int = 3) -> str:
-    cmd = ["sqlmap", "-u", url, "--batch", "--level", str(level), "--risk", str(risk), "--output-dir", "logs/sqlmap"]
+    output_dir = os.path.join("logs", "sqlmap")
+    cmd = ["sqlmap", "-u", url, "--batch", "--level", str(level), "--risk", str(risk), "--output-dir", output_dir]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         return f"✅ sqlmap terminé\n{result.stdout[-500:]}"
