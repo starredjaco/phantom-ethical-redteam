@@ -17,7 +17,7 @@ The Phantom Security Team
 
 TOOL_SPEC = {
     "name": "generate_phish_template",
-    "description": "Generate a social engineering template for educatinal prupose (no real send)",
+    "description": "Generate a social engineering template for educational purpose (no real send)",
     "input_schema": {
         "type": "object",
         "properties": {

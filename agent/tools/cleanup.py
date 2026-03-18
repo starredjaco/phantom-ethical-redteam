@@ -1,6 +1,7 @@
 import glob
 import shutil
 import os
+import tempfile
 
 
 def run() -> str:
@@ -8,15 +9,17 @@ def run() -> str:
     errors = []
 
     # Fixed path
-    if os.path.exists("logs/temp"):
+    logs_temp = os.path.join("logs", "temp")
+    if os.path.exists(logs_temp):
         try:
-            shutil.rmtree("logs/temp")
-            deleted.append("logs/temp")
+            shutil.rmtree(logs_temp)
+            deleted.append(logs_temp)
         except Exception as e:
-            errors.append(f"logs/temp: {e}")
+            errors.append(f"{logs_temp}: {e}")
 
-    # Glob-expanded paths
-    for path in glob.glob("/tmp/phantom_*"):
+    # Glob-expanded paths — cross-platform temp directory
+    tmp_dir = tempfile.gettempdir()
+    for path in glob.glob(os.path.join(tmp_dir, "phantom_*")):
         try:
             if os.path.isdir(path):
                 shutil.rmtree(path)

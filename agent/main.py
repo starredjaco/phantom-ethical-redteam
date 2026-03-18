@@ -13,6 +13,9 @@ from providers import PROVIDERS
 
 ROOT = Path(__file__).parent.parent
 
+# Ensure logs directory exists (first run or fresh clone)
+(ROOT / "logs").mkdir(exist_ok=True)
+
 logging.basicConfig(
     filename=ROOT / "logs" / "agent.log",
     level=logging.INFO,
