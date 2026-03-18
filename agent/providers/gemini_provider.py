@@ -2,6 +2,16 @@ from google import genai
 from google.genai import types
 from .base import BaseLLMProvider
 
+# Map JSON Schema types to Gemini types
+_TYPE_MAP = {
+    "string": types.Type.STRING,
+    "integer": types.Type.INTEGER,
+    "number": types.Type.NUMBER,
+    "boolean": types.Type.BOOLEAN,
+    "array": types.Type.ARRAY,
+    "object": types.Type.OBJECT,
+}
+
 
 class GeminiProvider(BaseLLMProvider):
 
@@ -11,13 +21,27 @@ class GeminiProvider(BaseLLMProvider):
         self.client = genai.Client(api_key=api_key)
         self.model_name = model or self.DEFAULT_MODEL
 
+    def _convert_schema(self, prop: dict) -> types.Schema:
+        """Convert a JSON Schema property to a Gemini Schema."""
+        json_type = prop.get("type", "string")
+        gemini_type = _TYPE_MAP.get(json_type, types.Type.STRING)
+
+        kwargs = {"type": gemini_type}
+        if "description" in prop:
+            kwargs["description"] = prop["description"]
+
+        # Handle array items
+        if json_type == "array" and "items" in prop:
+            kwargs["items"] = self._convert_schema(prop["items"])
+
+        return types.Schema(**kwargs)
+
     def convert_tools(self, tools: list) -> list:
         declarations = []
         for t in tools:
             props = {}
             for k, v in t["input_schema"].get("properties", {}).items():
-                # Map all params to STRING — Gemini schema strips 'default' and complex types
-                props[k] = types.Schema(type=types.Type.STRING)
+                props[k] = self._convert_schema(v)
 
             declarations.append(
                 types.FunctionDeclaration(
@@ -33,7 +57,6 @@ class GeminiProvider(BaseLLMProvider):
         return [types.Tool(function_declarations=declarations)]
 
     def _to_provider_contents(self, messages: list) -> list:
-        # Build id -> name lookup for function_response messages
         id_to_name: dict = {}
         for msg in messages:
             content = msg.get("content", [])

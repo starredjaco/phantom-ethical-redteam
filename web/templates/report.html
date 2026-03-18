@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Phantom - Report Viewer</title>
+    <style>
+        body { background: #0d1117; color: #c9d1d9; font-family: 'Courier New', monospace; margin: 0; padding: 20px; }
+        .toolbar { background: #161b22; padding: 12px 20px; border-radius: 6px; margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
+        .toolbar a, .toolbar button { background: #21262d; color: #58a6ff; border: 1px solid #30363d; padding: 8px 16px; border-radius: 4px; text-decoration: none; cursor: pointer; font-family: inherit; font-size: 14px; }
+        .toolbar a:hover, .toolbar button:hover { background: #30363d; }
+        .toolbar h2 { margin: 0; color: #f85149; flex: 1; }
+        iframe { width: 100%; height: calc(100vh - 120px); border: 1px solid #30363d; border-radius: 6px; background: #0d1117; }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <h2>Mission Report</h2>
+        <a href="/">Back to Dashboard</a>
+        <a id="download-html" href="#">Download HTML</a>
+        <a id="download-md" href="#">Download MD</a>
+    </div>
+    <iframe id="report-frame" src="/api/sessions/{{ session_id }}/report"></iframe>
+    <script>
+        const sid = "{{ session_id }}";
+        document.getElementById("download-html").href = `/api/sessions/${sid}/report`;
+        // MD download would need a separate endpoint
+        fetch(`/api/sessions/${sid}`).then(r => r.json()).then(data => {
+            const mdFile = data.files.find(f => f.name.includes("report") && f.name.endsWith(".md"));
+            if (mdFile) {
+                document.getElementById("download-md").href = `/api/sessions/${sid}/logs/${mdFile.name}`;
+            }
+        });
+    </script>
+</body>
+</html>

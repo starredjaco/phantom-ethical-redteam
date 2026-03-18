@@ -1,6 +1,11 @@
+"""Session management and logging infrastructure."""
+
 import os
 import glob
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 def init_session() -> str:
@@ -9,11 +14,12 @@ def init_session() -> str:
     session_dir = os.path.join("logs", ts)
     os.makedirs(session_dir, exist_ok=True)
     os.environ["PHANTOM_SESSION_DIR"] = session_dir
+    logger.info("Session initialized: %s", session_dir)
     return session_dir
 
 
 def log_path(filename: str) -> str:
-    """Return a session-scoped path under logs/<session>/<filename>, creating dirs as needed."""
+    """Return a session-scoped path under logs/<session>/<filename>."""
     session_dir = os.environ.get("PHANTOM_SESSION_DIR", "logs")
     path = os.path.join(session_dir, filename)
     parent = os.path.dirname(path)
@@ -23,18 +29,20 @@ def log_path(filename: str) -> str:
 
 
 def find_latest(filename: str) -> str | None:
-    """Search for filename in the current session dir, then in all session dirs (newest first)."""
-    # Current session first
+    """Search for filename in current session, then all sessions (newest first)."""
     current = log_path(filename)
     if os.path.exists(current):
         return current
 
-    # Walk all logs/<session>/ subdirs, newest first
     pattern = os.path.join("logs", "*", filename)
     matches = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
     if matches:
         return matches[0]
 
-    # Root logs/ fallback
     root = os.path.join("logs", filename)
     return root if os.path.exists(root) else None
+
+
+def get_session_dir() -> str:
+    """Return the current session directory."""
+    return os.environ.get("PHANTOM_SESSION_DIR", "logs")

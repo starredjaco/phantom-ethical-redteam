@@ -1,19 +1,18 @@
+"""Remove Phantom's temporary files (preserves mission reports)."""
+
 import glob
 import shutil
 import os
+import logging
 import tempfile
+
+logger = logging.getLogger(__name__)
 
 
 def run() -> str:
-    """
-    Remove only Phantom's own temporary files.
-    Preserves: logs/<session>/ directories (mission reports, scan results).
-    Removes:   logs/temp/  and  /tmp/phantom_*
-    """
     deleted = []
     errors = []
 
-    # Explicit temp dir inside logs/ (never touches session subdirs)
     logs_temp = os.path.join("logs", "temp")
     if os.path.exists(logs_temp):
         try:
@@ -22,7 +21,6 @@ def run() -> str:
         except Exception as e:
             errors.append(f"{logs_temp}: {e}")
 
-    # OS temp directory — only phantom-prefixed entries
     tmp_dir = tempfile.gettempdir()
     for path in glob.glob(os.path.join(tmp_dir, "phantom_*")):
         try:
@@ -35,16 +33,18 @@ def run() -> str:
             errors.append(f"{path}: {e}")
 
     if errors:
-        return f"⚠️ Cleanup partial — deleted: {deleted}, errors: {errors}"
+        logger.warning("Cleanup partial: deleted=%s, errors=%s", deleted, errors)
+        return f"Cleanup partial \u2014 deleted: {deleted}, errors: {errors}"
     if deleted:
-        return f"✅ Temp files deleted: {deleted}\n   (Mission reports in logs/<session>/ are preserved)"
-    return "✅ Nothing to clean (mission reports in logs/<session>/ preserved)"
+        logger.info("Cleanup: deleted %s", deleted)
+        return f"Temp files deleted: {deleted}\n   (Mission reports in logs/<session>/ preserved)"
+    return "Nothing to clean (mission reports in logs/<session>/ preserved)"
 
 
 TOOL_SPEC = {
     "name": "cleanup_temp",
     "description": (
-        "Remove Phantom's own temporary files (logs/temp/, /tmp/phantom_*). "
+        "Remove Phantom's temporary files (logs/temp/, /tmp/phantom_*). "
         "Mission reports and scan results in logs/<session>/ are always preserved."
     ),
     "input_schema": {"type": "object", "properties": {}},

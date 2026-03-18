@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phantom - Ethical Red Team Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>PHANTOM</h1>
+            <span class="subtitle">Ethical Red Team Dashboard</span>
+            <div class="status" id="connection-status">Disconnected</div>
+        </div>
+    </header>
+
+    <div class="layout">
+        <!-- Left Sidebar: Sessions -->
+        <aside class="sidebar-left" id="sessions-panel">
+            <h2>Sessions</h2>
+            <div id="session-list"></div>
+        </aside>
+
+        <!-- Main Area -->
+        <main>
+            <!-- Controls -->
+            <div class="controls">
+                <div class="control-row">
+                    <input type="text" id="scope-input" placeholder="Target scope (e.g. https://target.com)" class="input-field">
+                    <select id="provider-select" class="input-field">
+                        <option value="anthropic">Anthropic</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="grok">Grok</option>
+                        <option value="gemini">Gemini</option>
+                        <option value="mistral">Mistral</option>
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="ollama">Ollama</option>
+                    </select>
+                    <button id="btn-launch" class="btn btn-primary" onclick="startMission()">Launch Mission</button>
+                    <button id="btn-stop" class="btn btn-danger" onclick="stopMission()" disabled>Stop</button>
+                </div>
+            </div>
+
+            <!-- Terminal Output -->
+            <div class="terminal" id="terminal">
+                <div class="terminal-header">
+                    <span>Terminal Output</span>
+                    <button class="btn btn-small" onclick="clearTerminal()">Clear</button>
+                </div>
+                <div class="terminal-body" id="terminal-body">
+                    <div class="terminal-line system">Phantom Dashboard ready. Configure scope and launch a mission.</div>
+                </div>
+            </div>
+
+            <!-- Tool Timeline -->
+            <div class="timeline" id="timeline">
+                <h3>Tool Execution Timeline</h3>
+                <div class="timeline-bar" id="timeline-bar"></div>
+            </div>
+        </main>
+
+        <!-- Right Sidebar: Findings -->
+        <aside class="sidebar-right">
+            <h2>Findings</h2>
+            <div class="findings-summary">
+                <div class="finding-badge critical" id="count-critical">0 Critical</div>
+                <div class="finding-badge high" id="count-high">0 High</div>
+                <div class="finding-badge medium" id="count-medium">0 Medium</div>
+                <div class="finding-badge low" id="count-low">0 Low</div>
+                <div class="finding-badge info" id="count-info">0 Info</div>
+            </div>
+            <div id="findings-list"></div>
+        </aside>
+    </div>
+
+    <footer>
+        <span>Phantom Ethical Red Team &mdash; Authorized Testing Only</span>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,44 +1,44 @@
-import os
 import json
+import logging
+from pathlib import Path
 
-LOGS_DIR = "logs"
+logger = logging.getLogger(__name__)
+LOGS_DIR = Path("logs")
 
 
 def run(filename: str = "") -> str:
     """Read a result file from logs/ or list all available log files."""
-    logs_abs = os.path.abspath(LOGS_DIR)
+    logs_abs = LOGS_DIR.resolve()
 
     if not filename:
         entries = []
-        for root, _, files in os.walk(logs_abs):
-            for f in sorted(files):
-                path = os.path.join(root, f)
-                rel = os.path.relpath(path, logs_abs)
-                size = os.path.getsize(path)
+        for path in sorted(logs_abs.rglob("*")):
+            if path.is_file():
+                rel = path.relative_to(logs_abs)
+                size = path.stat().st_size
                 entries.append(f"  {rel} ({size} bytes)")
         if not entries:
-            return "📂 logs/ is empty"
-        return "📂 Available logs:\n" + "\n".join(entries)
+            return "logs/ is empty"
+        return "Available logs:\n" + "\n".join(entries)
 
-    # Security: block path traversal
-    target = os.path.abspath(os.path.join(LOGS_DIR, filename))
-    if not target.startswith(logs_abs + os.sep) and target != logs_abs:
-        return "❌ Access denied: path outside logs/"
+    # Security: resolve symlinks and block path traversal
+    try:
+        target = (LOGS_DIR / filename).resolve(strict=True)
+    except (OSError, ValueError):
+        return f"File not found: {filename}"
 
-    if not os.path.exists(target):
-        return f"❌ File not found: {filename}"
+    if not str(target).startswith(str(logs_abs)):
+        return "Access denied: path outside logs/"
 
     try:
-        with open(target, encoding="utf-8", errors="replace") as f:
-            content = f.read()
+        content = target.read_text(encoding="utf-8", errors="replace")
 
         if not content.strip():
-            return f"📄 {filename}: (empty)"
+            return f"{filename}: (empty)"
 
         if filename.endswith(".json"):
             lines = [l.strip() for l in content.splitlines() if l.strip()]
 
-            # Try JSONL (nuclei format — multiple JSON objects, one per line)
             parsed = []
             for line in lines:
                 try:
@@ -47,15 +47,15 @@ def run(filename: str = "") -> str:
                     pass
 
             if len(parsed) > 1:
-                summary = f"📄 {filename} – {len(parsed)} entries:\n"
+                summary = f"{filename} \u2013 {len(parsed)} entries:\n"
                 for entry in parsed[:20]:
-                    if "info" in entry:  # nuclei finding
+                    if "info" in entry:
                         cve_list = (entry.get("info", {}).get("classification") or {}).get("cve-id") or []
                         cve = cve_list[0] if cve_list else entry.get("template-id", "")
                         name = entry.get("info", {}).get("name", "?")
                         sev = entry.get("info", {}).get("severity", "?").upper()
                         host = entry.get("matched-at", entry.get("host", "?"))
-                        summary += f"  [{sev}] {cve or name} → {host}\n"
+                        summary += f"  [{sev}] {cve or name} \u2192 {host}\n"
                     else:
                         summary += f"  {json.dumps(entry)[:120]}\n"
                 if len(parsed) > 20:
@@ -63,11 +63,10 @@ def run(filename: str = "") -> str:
                 return summary.strip()
 
             if len(parsed) == 1:
-                # Single JSON object (e.g. ffuf output)
                 data = parsed[0]
                 results = data.get("results", [])
                 if results:
-                    summary = f"📄 {filename} – {len(results)} results:\n"
+                    summary = f"{filename} \u2013 {len(results)} results:\n"
                     for r in results[:20]:
                         status = r.get("status", "?")
                         url = r.get("url", (r.get("input") or {}).get("FUZZ", "?"))
@@ -76,15 +75,16 @@ def run(filename: str = "") -> str:
                     if len(results) > 20:
                         summary += f"  ... +{len(results) - 20} more"
                     return summary.strip()
-                return f"📄 {filename}:\n{json.dumps(data, indent=2)[:3000]}"
+                return f"{filename}:\n{json.dumps(data, indent=2)[:3000]}"
 
-        # Plain text (sqlmap, bettercap, etc.)
+        # Plain text
         if len(content) > 3000:
-            return f"📄 {filename} (first 3000 chars):\n{content[:3000]}\n..."
-        return f"📄 {filename}:\n{content}"
+            return f"{filename} (first 3000 chars):\n{content[:3000]}\n..."
+        return f"{filename}:\n{content}"
 
     except Exception as e:
-        return f"❌ Error reading {filename}: {str(e)}"
+        logger.error("Error reading %s: %s", filename, e)
+        return f"Error reading {filename}: {str(e)}"
 
 
 TOOL_SPEC = {
