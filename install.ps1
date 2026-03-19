@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Phantom – Ethical RedTeam — Windows Installer v1.6.0
+    Phantom - Ethical RedTeam -- Windows Installer v1.6.0
 .DESCRIPTION
     Interactive setup: LLM provider, API key, authorized scope, dependencies.
     Run from the repo root: .\install.ps1
@@ -17,18 +17,18 @@ Write-Host "  Installer v1.6.0 (Windows)"            -ForegroundColor Cyan
 Write-Host "========================================"  -ForegroundColor Cyan
 Write-Host ""
 
-# ─────────────────────────────────────────
-# STEP 0 — LLM Provider selection
-# ─────────────────────────────────────────
+# -----------------------------------------
+# STEP 0 -- LLM Provider selection
+# -----------------------------------------
 Write-Host "[ STEP 0 / 3 ] LLM Provider" -ForegroundColor Yellow
 Write-Host "-----------------------------------------"
-Write-Host "  1) Anthropic  (Claude sonnet-4-6)   — https://console.anthropic.com"
-Write-Host "  2) OpenAI     (ChatGPT 5.4)        — https://platform.openai.com"
-Write-Host "  3) xAI        (Grok 4.20 Beta)     — https://console.x.ai"
-Write-Host "  4) Google     (Gemini 3)           — https://aistudio.google.com/apikey"
-Write-Host "  5) Mistral    (mistral-large)      — https://console.mistral.ai"
-Write-Host "  6) DeepSeek   (DeepSeek 3.2)       — https://platform.deepseek.com"
-Write-Host "  7) Ollama     (local — deepseek-r1:3.2 default)"
+Write-Host "  1) Anthropic  (Claude sonnet-4-6)   - https://console.anthropic.com"
+Write-Host "  2) OpenAI     (ChatGPT 5.4)         - https://platform.openai.com"
+Write-Host "  3) xAI        (Grok 4.20 Beta)      - https://console.x.ai"
+Write-Host "  4) Google     (Gemini 3)             - https://aistudio.google.com/apikey"
+Write-Host "  5) Mistral    (mistral-large)        - https://console.mistral.ai"
+Write-Host "  6) DeepSeek   (DeepSeek 3.2)         - https://platform.deepseek.com"
+Write-Host "  7) Ollama     (local - deepseek-r1:3.2 default)"
 Write-Host ""
 
 $providerMap = @{
@@ -49,16 +49,16 @@ $provider   = $providerMap[$choice].Name
 $envVar     = $providerMap[$choice].EnvVar
 $keyPrefix  = $providerMap[$choice].Prefix
 
-Write-Host "✅ Provider selected : $($provider.ToUpper())" -ForegroundColor Green
+Write-Host "[OK] Provider selected : $($provider.ToUpper())" -ForegroundColor Green
 Write-Host ""
 
-# ─────────────────────────────────────────
-# Helper — test LLM connection
-# ─────────────────────────────────────────
+# -----------------------------------------
+# Helper -- test LLM connection
+# -----------------------------------------
 function Test-LLMConnection {
     param([string]$Provider, [string]$ApiKey, [string]$OllamaHost = "http://localhost:11434")
 
-    Write-Host -NoNewline "  → Testing connection to $Provider API... "
+    Write-Host -NoNewline "  -> Testing connection to $Provider API... "
 
     $headers = @{ "Content-Type" = "application/json" }
     $body    = '{"model":"","max_tokens":5,"messages":[{"role":"user","content":"hi"}]}'
@@ -101,19 +101,19 @@ function Test-LLMConnection {
             }
         }
         if ($r.StatusCode -eq 200) {
-            Write-Host "✅ OK (HTTP 200)" -ForegroundColor Green
+            Write-Host "[OK] (HTTP 200)" -ForegroundColor Green
             return $true
         }
     } catch {
         $code = $_.Exception.Response.StatusCode.Value__
-        Write-Host "❌ Failed (HTTP $code)" -ForegroundColor Red
+        Write-Host "[FAIL] (HTTP $code)" -ForegroundColor Red
     }
     return $false
 }
 
-# ─────────────────────────────────────────
-# STEP 1 — API Key + connection test
-# ─────────────────────────────────────────
+# -----------------------------------------
+# STEP 1 -- API Key + connection test
+# -----------------------------------------
 Write-Host "[ STEP 1 / 3 ] API Key" -ForegroundColor Yellow
 Write-Host "-----------------------------------------"
 
@@ -125,14 +125,14 @@ if ($provider -eq "ollama") {
     if ($inputHost) { $ollamaHost = $inputHost }
 
     if (-not (Test-LLMConnection -Provider "ollama" -OllamaHost $ollamaHost)) {
-        Write-Host "⚠️  Cannot reach Ollama at $ollamaHost" -ForegroundColor Yellow
-        Write-Host "   Make sure Ollama is running : ollama serve" -ForegroundColor Yellow
-        $confirm = Read-Host "   Continue anyway? [y/N]"
+        Write-Host "[!] Cannot reach Ollama at $ollamaHost" -ForegroundColor Yellow
+        Write-Host "    Make sure Ollama is running : ollama serve" -ForegroundColor Yellow
+        $confirm = Read-Host "    Continue anyway? [y/N]"
         if ($confirm -notmatch "^[Yy]$") { Write-Host "Aborted."; exit 1 }
     }
 
     Set-Content -Path ".env" -Value "" -Encoding UTF8
-    Write-Host "✅ Ollama configured (host: $ollamaHost)" -ForegroundColor Green
+    Write-Host "[OK] Ollama configured (host: $ollamaHost)" -ForegroundColor Green
 } else {
     $connected = $false
     while (-not $connected) {
@@ -143,19 +143,19 @@ if ($provider -eq "ollama") {
 
         # Format check
         if ($apiKey.Length -le 10 -or ($keyPrefix -ne "" -and -not $apiKey.StartsWith($keyPrefix))) {
-            Write-Host "⚠️  Invalid key format. Try again." -ForegroundColor Red
+            Write-Host "[!] Invalid key format. Try again." -ForegroundColor Red
             continue
         }
 
         # Connection test
         $connected = Test-LLMConnection -Provider $provider -ApiKey $apiKey
         if (-not $connected) {
-            Write-Host "⚠️  Connection failed. Check your key and network, then try again." -ForegroundColor Red
+            Write-Host "[!] Connection failed. Check your key and network, then try again." -ForegroundColor Red
         }
     }
 
     Set-Content -Path ".env" -Value "$envVar=$apiKey" -Encoding UTF8
-    Write-Host "✅ API key saved to .env" -ForegroundColor Green
+    Write-Host "[OK] API key saved to .env" -ForegroundColor Green
 }
 Write-Host ""
 
@@ -167,16 +167,16 @@ if ($provider -eq "ollama") {
 }
 Set-Content -Path "config.yaml" -Value $configContent -Encoding UTF8
 
-# ─────────────────────────────────────────
-# STEP 2 — Authorized scope
-# ─────────────────────────────────────────
+# -----------------------------------------
+# STEP 2 -- Authorized scope
+# -----------------------------------------
 Write-Host "[ STEP 2 / 3 ] Authorized Scope" -ForegroundColor Yellow
 Write-Host "-----------------------------------------"
 
 do {
     $scopeUrl = Read-Host "Target URL (e.g. https://target.example.com)"
     $validUrl = $scopeUrl -match "^https?://" -and $scopeUrl -ne "https://xxx"
-    if (-not $validUrl) { Write-Host "⚠️  Invalid URL or placeholder. Enter a real authorized target." -ForegroundColor Red }
+    if (-not $validUrl) { Write-Host "[!] Invalid URL or placeholder. Enter a real authorized target." -ForegroundColor Red }
 } while (-not $validUrl)
 
 $scopeNote = Read-Host "Authorization note (e.g. 'Pentest contract signed 2026-03-15')"
@@ -186,7 +186,7 @@ New-Item -ItemType Directory -Force -Path "scopes" | Out-Null
 New-Item -ItemType Directory -Force -Path "logs"   | Out-Null
 
 $scopeContent = @"
-**Scope autorisé :** $scopeUrl
+**Scope autorise :** $scopeUrl
 
 **Autorisation :** $scopeNote
 
@@ -194,18 +194,18 @@ $scopeContent = @"
 "@
 Set-Content -Path "scopes\current_scope.md" -Value $scopeContent -Encoding UTF8
 
-Write-Host "✅ Scope saved to scopes\current_scope.md" -ForegroundColor Green
+Write-Host "[OK] Scope saved to scopes\current_scope.md" -ForegroundColor Green
 Write-Host ""
 
-# ─────────────────────────────────────────
-# STEP 3 — Dependencies
-# ─────────────────────────────────────────
+# -----------------------------------------
+# STEP 3 -- Dependencies
+# -----------------------------------------
 Write-Host "[ STEP 3 / 3 ] Installing dependencies" -ForegroundColor Yellow
 Write-Host "-----------------------------------------"
 
 # Python check
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    Write-Host "Python not found — installing via winget..." -ForegroundColor Yellow
+    Write-Host "Python not found -- installing via winget..." -ForegroundColor Yellow
     winget install -e --id Python.Python.3.12 --silent
 }
 
@@ -221,7 +221,7 @@ if (-not (Get-Command nuclei -ErrorAction SilentlyContinue)) {
     Invoke-WebRequest -Uri $nucleiUrl -OutFile "bin\nuclei.zip"
     Expand-Archive -Path "bin\nuclei.zip" -DestinationPath "bin" -Force
     Remove-Item "bin\nuclei.zip"
-    Write-Host "✅ nuclei installed" -ForegroundColor Green
+    Write-Host "[OK] nuclei installed" -ForegroundColor Green
 }
 
 # ffuf (Windows binary)
@@ -231,10 +231,10 @@ if (-not (Get-Command ffuf -ErrorAction SilentlyContinue)) {
     Invoke-WebRequest -Uri $ffufUrl -OutFile "bin\ffuf.zip"
     Expand-Archive -Path "bin\ffuf.zip" -DestinationPath "bin" -Force
     Remove-Item "bin\ffuf.zip"
-    Write-Host "✅ ffuf installed" -ForegroundColor Green
+    Write-Host "[OK] ffuf installed" -ForegroundColor Green
 }
 
-# Default wordlist for ffuf (SecLists — shared with run_payloads PATT wordlists)
+# Default wordlist for ffuf (SecLists -- shared with run_payloads PATT wordlists)
 New-Item -ItemType Directory -Force -Path "wordlists" | Out-Null
 if (-not (Test-Path "wordlists\directory-list-2.3-medium.txt")) {
     Write-Host "Downloading default wordlist (SecLists)..."
@@ -242,9 +242,9 @@ if (-not (Test-Path "wordlists\directory-list-2.3-medium.txt")) {
         Invoke-WebRequest -Uri "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/directory-list-2.3-medium.txt" `
             -OutFile "wordlists\directory-list-2.3-medium.txt" -UseBasicParsing
         $lines = (Get-Content "wordlists\directory-list-2.3-medium.txt").Count
-        Write-Host "✅ wordlist downloaded ($lines entries)" -ForegroundColor Green
+        Write-Host "[OK] wordlist downloaded ($lines entries)" -ForegroundColor Green
     } catch {
-        Write-Host "⚠️  wordlist download failed — use run_payloads to generate PATT wordlists" -ForegroundColor Yellow
+        Write-Host "[!] wordlist download failed -- use run_payloads to generate PATT wordlists" -ForegroundColor Yellow
     }
 }
 
@@ -252,7 +252,7 @@ if (-not (Test-Path "wordlists\directory-list-2.3-medium.txt")) {
 if (-not (Test-Path "tools\sqlmap_repo")) {
     Write-Host "Cloning sqlmap..."
     git clone https://github.com/sqlmapproject/sqlmap.git tools\sqlmap_repo 2>$null
-    Write-Host "✅ sqlmap cloned" -ForegroundColor Green
+    Write-Host "[OK] sqlmap cloned" -ForegroundColor Green
 }
 
 # CyberStrikeAI
@@ -263,24 +263,24 @@ if (-not (Test-Path "tools\cyberstrike_repo")) {
         Push-Location tools\cyberstrike_repo
         go build -o ..\..\bin\cyberstrike.exe .\cmd\cyberstrike 2>$null
         Pop-Location
-        Write-Host "✅ CyberStrikeAI built" -ForegroundColor Green
+        Write-Host "[OK] CyberStrikeAI built" -ForegroundColor Green
     } else {
-        Write-Host "⚠️  Go not found — CyberStrikeAI skipped (install Go and re-run)" -ForegroundColor Yellow
+        Write-Host "[!] Go not found -- CyberStrikeAI skipped (install Go and re-run)" -ForegroundColor Yellow
     }
 }
 
 # Windows notes for Linux-only tools
 Write-Host ""
-Write-Host "ℹ️  Windows limitations:" -ForegroundColor Cyan
-Write-Host "   • bettercap  : Linux/macOS only — use WSL2 for network MITM"
-Write-Host "   • zphisher   : bash script — use WSL2 for phishing templates"
+Write-Host "[i] Windows limitations:" -ForegroundColor Cyan
+Write-Host "    - bettercap  : Linux/macOS only -- use WSL2 for network MITM"
+Write-Host "    - zphisher   : bash script -- use WSL2 for phishing templates"
 
-# ─────────────────────────────────────────
+# -----------------------------------------
 # Summary
-# ─────────────────────────────────────────
+# -----------------------------------------
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  ✅ Installation complete !"            -ForegroundColor Green
+Write-Host "  [OK] Installation complete !"          -ForegroundColor Green
 Write-Host "  Provider : $($provider.ToUpper())"
 Write-Host "  Scope    : $scopeUrl"
 Write-Host "========================================" -ForegroundColor Cyan
