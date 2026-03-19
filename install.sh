@@ -89,7 +89,7 @@ echo "  3) xAI        (Grok 4.20 Beta)      — https://console.x.ai"
 echo "  4) Google     (Gemini 3)            — https://aistudio.google.com/apikey"
 echo "  5) Mistral    (mistral-large)       — https://console.mistral.ai"
 echo "  6) DeepSeek   (DeepSeek 3.2)        — https://platform.deepseek.com"
-echo "  7) Ollama     (local — deepseek-r1:3.2 default)"
+echo "  7) Ollama     (local — deepseek-r1:8b default)"
 echo ""
 
 while true; do
@@ -129,8 +129,33 @@ if [ "$PROVIDER" = "ollama" ]; then
         [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 1; }
     fi
 
+    OLLAMA_MODEL="deepseek-r1:8b"
+    echo ""
+    echo "  Default Ollama model: $OLLAMA_MODEL"
+    # List local models
+    if command -v ollama &>/dev/null; then
+        echo "  Local models:"
+        ollama list 2>/dev/null | tail -n +2 | awk '{print "    - "$1}'
+    fi
+    read -rp "Model name [$OLLAMA_MODEL] : " input_model
+    OLLAMA_MODEL=${input_model:-$OLLAMA_MODEL}
+
+    # Pull the model if not already present
+    echo "  Checking if '$OLLAMA_MODEL' is available locally..."
+    if command -v ollama &>/dev/null; then
+        if ! ollama list 2>/dev/null | grep -q "$OLLAMA_MODEL"; then
+            echo "  Pulling '$OLLAMA_MODEL' (this may take a while)..."
+            ollama pull "$OLLAMA_MODEL" || echo "  ⚠️  Pull failed. Run manually: ollama pull $OLLAMA_MODEL"
+        else
+            echo "  ✅ Model '$OLLAMA_MODEL' already available"
+        fi
+    else
+        echo "  ⚠️  ollama CLI not found. Run manually: ollama pull $OLLAMA_MODEL"
+    fi
+
     sed -i "s|^provider:.*|provider: \"$PROVIDER\"|" config.yaml
     sed -i "s|^ollama_host:.*|ollama_host: \"$OLLAMA_HOST\"|" config.yaml
+    sed -i "s|^model:.*|model: \"$OLLAMA_MODEL\"|" config.yaml
     > .env
 else
     while true; do

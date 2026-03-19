@@ -33,7 +33,7 @@ Uses Nmap, Nuclei, sqlmap, ffuf, WhatWeb, advanced reconnaissance, screenshots, 
 | Google (Gemini) | `gemini-3.0-pro` *(google-genai SDK)* | `GEMINI_API_KEY` |
 | Mistral | `mistral-large-latest` | `MISTRAL_API_KEY` |
 | DeepSeek | `deepseek-chat-v3.2` | `DEEPSEEK_API_KEY` |
-| Ollama (local) | `deepseek-r1:3.2` | *(none)* |
+| Ollama (local) | `deepseek-r1:8b` | *(none)* |
 
 ## Built-in Tools (20)
 
@@ -94,7 +94,7 @@ chmod +x install.sh
 [ STEP 0 / 3 ] LLM Provider
   1) Anthropic (Claude sonnet-4-6)   2) OpenAI (ChatGPT 5.4)    3) xAI (Grok 4.20 Beta)
   4) Google (Gemini 3)               5) Mistral                  6) DeepSeek 3.2
-  7) Ollama (local — deepseek-r1:3.2)
+  7) Ollama (local — deepseek-r1:8b)
 Choose provider [1-7] : 1
 
 [ STEP 1 / 3 ] API Key

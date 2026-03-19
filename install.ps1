@@ -28,7 +28,7 @@ Write-Host "  3) xAI        (Grok 4.20 Beta)      - https://console.x.ai"
 Write-Host "  4) Google     (Gemini 3)             - https://aistudio.google.com/apikey"
 Write-Host "  5) Mistral    (mistral-large)        - https://console.mistral.ai"
 Write-Host "  6) DeepSeek   (DeepSeek 3.2)         - https://platform.deepseek.com"
-Write-Host "  7) Ollama     (local - deepseek-r1:3.2 default)"
+Write-Host "  7) Ollama     (local - deepseek-r1:8b default)"
 Write-Host ""
 
 $providerMap = @{
@@ -131,8 +131,49 @@ if ($provider -eq "ollama") {
         if ($confirm -notmatch "^[Yy]$") { Write-Host "Aborted."; exit 1 }
     }
 
+    # List local models and let user pick or pull one
+    $ollamaModel = "deepseek-r1:8b"
+    Write-Host ""
+    Write-Host "  Default Ollama model: $ollamaModel"
+    try {
+        $tags = Invoke-RestMethod -Uri "$ollamaHost/api/tags" -UseBasicParsing -ErrorAction Stop
+        if ($tags.models.Count -gt 0) {
+            Write-Host "  Local models found:" -ForegroundColor Cyan
+            foreach ($m in $tags.models) { Write-Host "    - $($m.name)" }
+        } else {
+            Write-Host "  No local models found." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "  [!] Could not list models (Ollama unreachable)" -ForegroundColor Yellow
+    }
+    $inputModel = Read-Host "Model name [$ollamaModel]"
+    if ($inputModel) { $ollamaModel = $inputModel }
+
+    # Pull the model if not already present
+    Write-Host "  Checking if '$ollamaModel' is available locally..."
+    try {
+        $tags = Invoke-RestMethod -Uri "$ollamaHost/api/tags" -UseBasicParsing -ErrorAction Stop
+        $found = $tags.models | Where-Object { $_.name -eq $ollamaModel -or $_.name -eq "$ollamaModel`:latest" }
+        if (-not $found) {
+            Write-Host "  Pulling '$ollamaModel' (this may take a while)..." -ForegroundColor Yellow
+            try {
+                $env:GIT_REDIRECT_STDERR = "2>&1"
+                ollama pull $ollamaModel
+                Write-Host "  [OK] Model '$ollamaModel' pulled" -ForegroundColor Green
+            } catch {
+                Write-Host "  [!] Pull failed. Run manually: ollama pull $ollamaModel" -ForegroundColor Yellow
+            } finally {
+                Remove-Item Env:\GIT_REDIRECT_STDERR -ErrorAction SilentlyContinue
+            }
+        } else {
+            Write-Host "  [OK] Model '$ollamaModel' already available" -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  [!] Could not check models. Run manually: ollama pull $ollamaModel" -ForegroundColor Yellow
+    }
+
     [System.IO.File]::WriteAllText("$PWD\.env", "", [System.Text.UTF8Encoding]::new($false))
-    Write-Host "[OK] Ollama configured (host: $ollamaHost)" -ForegroundColor Green
+    Write-Host "[OK] Ollama configured (host: $ollamaHost, model: $ollamaModel)" -ForegroundColor Green
 } else {
     $connected = $false
     while (-not $connected) {
@@ -164,6 +205,7 @@ $configContent = Get-Content "config.yaml" -Raw
 $configContent = $configContent -replace '(?m)^provider:.*', "provider: `"$provider`""
 if ($provider -eq "ollama") {
     $configContent = $configContent -replace '(?m)^ollama_host:.*', "ollama_host: `"$ollamaHost`""
+    $configContent = $configContent -replace '(?m)^model:.*', "model: `"$ollamaModel`""
 }
 $configContent = $configContent.TrimEnd()
 [System.IO.File]::WriteAllText("$PWD\config.yaml", $configContent, [System.Text.UTF8Encoding]::new($false))

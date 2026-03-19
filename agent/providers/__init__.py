@@ -39,7 +39,7 @@ def get_provider(config: dict) -> BaseLLMProvider:
     if name == "ollama":
         from .ollama_provider import OllamaProvider
         host = config.get("ollama_host", "http://localhost:11434")
-        return OllamaProvider(model=model or "deepseek-r1:3.2", host=host)
+        return OllamaProvider(model=model or "deepseek-r1:8b", host=host)
 
     if name == "mistral":
         from .mistral_provider import MistralProvider
