@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Phantom - Ethical RedTeam -- Windows Installer v1.6.0
+    Phantom - Ethical RedTeam -- Windows Installer v2.0.8
 .DESCRIPTION
     Interactive setup: LLM provider, API key, authorized scope, dependencies.
     Run from the repo root: .\install.ps1
@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Phantom - Ethical RedTeam"              -ForegroundColor Cyan
-Write-Host "  Installer v1.6.0 (Windows)"            -ForegroundColor Cyan
+Write-Host "  Installer v2.0.8 (Windows)"            -ForegroundColor Cyan
 Write-Host "========================================"  -ForegroundColor Cyan
 Write-Host ""
 
@@ -131,7 +131,7 @@ if ($provider -eq "ollama") {
         if ($confirm -notmatch "^[Yy]$") { Write-Host "Aborted."; exit 1 }
     }
 
-    Set-Content -Path ".env" -Value "" -Encoding UTF8
+    [System.IO.File]::WriteAllText("$PWD\.env", "", [System.Text.UTF8Encoding]::new($false))
     Write-Host "[OK] Ollama configured (host: $ollamaHost)" -ForegroundColor Green
 } else {
     $connected = $false
@@ -154,18 +154,19 @@ if ($provider -eq "ollama") {
         }
     }
 
-    Set-Content -Path ".env" -Value "$envVar=$apiKey" -Encoding UTF8
+    [System.IO.File]::WriteAllText("$PWD\.env", "$envVar=$apiKey", [System.Text.UTF8Encoding]::new($false))
     Write-Host "[OK] API key saved to .env" -ForegroundColor Green
 }
 Write-Host ""
 
-# Update config.yaml provider field
+# Update config.yaml provider field (UTF-8 without BOM -- BOM breaks YAML parser)
 $configContent = Get-Content "config.yaml" -Raw
 $configContent = $configContent -replace '(?m)^provider:.*', "provider: `"$provider`""
 if ($provider -eq "ollama") {
     $configContent = $configContent -replace '(?m)^ollama_host:.*', "ollama_host: `"$ollamaHost`""
 }
-Set-Content -Path "config.yaml" -Value $configContent -Encoding UTF8
+$configContent = $configContent.TrimEnd()
+[System.IO.File]::WriteAllText("$PWD\config.yaml", $configContent, [System.Text.UTF8Encoding]::new($false))
 
 # -----------------------------------------
 # STEP 2 -- Authorized scope

@@ -3,7 +3,7 @@ set -e
 
 echo "========================================"
 echo "  Phantom – Ethical RedTeam"
-echo "  Installer v1.6.0"
+echo "  Installer v2.0.8"
 echo "========================================"
 echo ""
 
