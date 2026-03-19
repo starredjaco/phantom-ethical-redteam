@@ -111,15 +111,17 @@ Authorization note : Pentest contract signed 2026-03-15
 
 > `chmod +x install.sh` is required once after cloning. Phantom launches automatically at the end.
 
-### Windows
+### Windows (PowerShell)
 
-Double-click **`install.bat`** — or from a terminal:
+Colle cette ligne dans PowerShell depuis le dossier Phantom :
 
+```powershell
+& ([scriptblock]::Create((Get-Content .\install.ps1 -Raw)))
 ```
-install.bat
-```
 
-No PowerShell execution policy issue. The `.bat` launcher handles everything.
+> Cette commande lit le contenu du script et l'exécute comme un scriptblock — contourne complètement la vérification de signature sans modifier la politique système.
+
+Ou double-clique sur **`install.bat`** (même résultat, sans PowerShell).
 
 Same interactive flow (provider -> API key -> scope -> dependencies).
 Windows limitations: `bettercap` and `zphisher` require WSL2.
