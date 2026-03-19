@@ -89,7 +89,7 @@ echo "  3) xAI        (Grok 4.20 Beta)      — https://console.x.ai"
 echo "  4) Google     (Gemini 3)            — https://aistudio.google.com/apikey"
 echo "  5) Mistral    (mistral-large)       — https://console.mistral.ai"
 echo "  6) DeepSeek   (DeepSeek 3.2)        — https://platform.deepseek.com"
-echo "  7) Ollama     (local — deepseek-r1:8b default)"
+echo "  7) Ollama     (local — deepseek-v3.2:cloud default)"
 echo ""
 
 while true; do
@@ -129,7 +129,7 @@ if [ "$PROVIDER" = "ollama" ]; then
         [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 1; }
     fi
 
-    OLLAMA_MODEL="deepseek-r1:8b"
+    OLLAMA_MODEL="deepseek-v3.2:cloud"
     echo ""
     echo "  Default Ollama model: $OLLAMA_MODEL"
     # List local models

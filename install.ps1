@@ -28,7 +28,7 @@ Write-Host "  3) xAI        (Grok 4.20 Beta)      - https://console.x.ai"
 Write-Host "  4) Google     (Gemini 3)             - https://aistudio.google.com/apikey"
 Write-Host "  5) Mistral    (mistral-large)        - https://console.mistral.ai"
 Write-Host "  6) DeepSeek   (DeepSeek 3.2)         - https://platform.deepseek.com"
-Write-Host "  7) Ollama     (local - deepseek-r1:8b default)"
+Write-Host "  7) Ollama     (local - deepseek-v3.2:cloud default)"
 Write-Host ""
 
 $providerMap = @{
@@ -132,7 +132,7 @@ if ($provider -eq "ollama") {
     }
 
     # List local models and let user pick or pull one
-    $ollamaModel = "deepseek-r1:8b"
+    $ollamaModel = "deepseek-v3.2:cloud"
     Write-Host ""
     Write-Host "  Default Ollama model: $ollamaModel"
     try {
