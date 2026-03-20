@@ -1,5 +1,7 @@
 """CVSS risk scoring utility for Phantom reports."""
 
+from tools import register_tool
+
 SEVERITY_SCORES = {
     "critical": 9.5,
     "high": 7.5,
@@ -16,24 +18,51 @@ SEVERITY_WEIGHTS = {
     "info": 0.1,
 }
 
+TOOL_SPEC = {
+    "name": "calculate_risk_score",
+    "description": (
+        "Calculate aggregate CVSS risk score from collected findings. "
+        "Pass a list of findings, each with a 'severity' field "
+        "(critical/high/medium/low/info). Returns score, label, and breakdown."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "findings": {
+                "type": "array",
+                "description": "List of finding objects with 'severity' field",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "severity": {"type": "string"},
+                        "name": {"type": "string"},
+                    },
+                },
+            },
+        },
+        "required": ["findings"],
+    },
+}
 
-def calculate_risk_score(findings: list[dict]) -> dict:
-    """
-    Calculate aggregate risk score from nuclei-style findings.
 
-    Each finding should have info.severity (critical/high/medium/low/info).
-    Returns: {score, label, breakdown, total_findings}
-    """
+@register_tool(TOOL_SPEC)
+def run(findings: list = None, **kwargs) -> str:
+    """Calculate aggregate risk score."""
+    if not findings:
+        return "No findings provided."
+
     breakdown = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
 
     for f in findings:
-        sev = (f.get("info", {}).get("severity") or "info").lower()
+        # Support both flat {"severity": "high"} and nested {"info": {"severity": "high"}}
+        sev = f.get("severity") or (f.get("info", {}) or {}).get("severity") or "info"
+        sev = sev.lower()
         if sev in breakdown:
             breakdown[sev] += 1
 
     total = sum(breakdown.values())
     if total == 0:
-        return {"score": 0.0, "label": "None", "breakdown": breakdown, "total_findings": 0}
+        return "No valid findings. Score: 0.0/10 (None)"
 
     weighted_sum = sum(
         breakdown[sev] * SEVERITY_WEIGHTS[sev] * SEVERITY_SCORES[sev]
@@ -53,9 +82,13 @@ def calculate_risk_score(findings: list[dict]) -> dict:
     else:
         label = "Informational"
 
-    return {
-        "score": score,
-        "label": label,
-        "breakdown": breakdown,
-        "total_findings": total,
-    }
+    lines = [
+        f"Risk Score: {score}/10 ({label})",
+        f"Total findings: {total}",
+        f"  Critical: {breakdown['critical']}",
+        f"  High: {breakdown['high']}",
+        f"  Medium: {breakdown['medium']}",
+        f"  Low: {breakdown['low']}",
+        f"  Info: {breakdown['info']}",
+    ]
+    return "\n".join(lines)

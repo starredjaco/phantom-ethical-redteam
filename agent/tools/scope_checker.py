@@ -5,7 +5,39 @@ import ipaddress
 import logging
 from urllib.parse import urlparse
 
+from tools import register_tool
+
 logger = logging.getLogger(__name__)
+
+TOOL_SPEC = {
+    "name": "check_scope",
+    "description": (
+        "Verify whether a target (URL, domain, IP, or CIDR) is within the authorized scope. "
+        "Use this before any offensive action to confirm authorization."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "target": {
+                "type": "string",
+                "description": "Target to verify (URL, domain, IP, or CIDR)",
+            },
+        },
+        "required": ["target"],
+    },
+}
+
+
+@register_tool(TOOL_SPEC)
+def run(target: str = "", **kwargs) -> str:
+    """Check if a target is in scope."""
+    if not target:
+        return "No target provided."
+    result = scope_guard(target)
+    if result:
+        return result
+    authorized = load_scope_targets()
+    return f"IN SCOPE: '{target}' is authorized.\nAll scope targets: {authorized}"
 
 
 def load_scope_targets(scope_file: str = "scopes/current_scope.md") -> list:

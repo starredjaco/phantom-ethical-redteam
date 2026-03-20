@@ -19,29 +19,9 @@ def register_tool(spec: dict):
 
 
 def _import_all_tools():
-    """Import all tool modules to trigger @register_tool decorators."""
-    # Core tools
-    from . import nuclei, sqlmap, ffuf, recon, set_phish, cleanup
-    from . import bettercap, zphisher, cyberstrike, read_log, payloads
-    from . import human_input, report
+    """Import all tool modules and register them."""
 
-    # New tools (optional — don't crash if missing)
-    _optional = [
-        "nmap_scan", "whatweb_tool", "screenshot",
-        "auth_manager", "mission_diff",
-    ]
-    for mod_name in _optional:
-        try:
-            __import__(f"tools.{mod_name}", fromlist=[mod_name])
-        except ImportError as e:
-            logger.debug("Optional tool '%s' not available: %s", mod_name, e)
-
-
-# Auto-register all tools on import — fallback to manual if decorator not used
-_import_all_tools()
-
-# If tools didn't use @register_tool, build from TOOL_SPEC attributes
-if not TOOL_SPECS:
+    # --- Core tools (no decorator — manual registration) ---
     from .nuclei import run as run_nuclei, TOOL_SPEC as nuclei_spec
     from .sqlmap import run as run_sqlmap, TOOL_SPEC as sqlmap_spec
     from .ffuf import run as run_ffuf, TOOL_SPEC as ffuf_spec
@@ -56,12 +36,12 @@ if not TOOL_SPECS:
     from .human_input import run as request_human_input, TOOL_SPEC as human_input_spec
     from .report import run as generate_report, TOOL_SPEC as report_spec
 
-    _specs = [
+    _core_specs = [
         nuclei_spec, sqlmap_spec, ffuf_spec, recon_spec, phish_spec, cleanup_spec,
         bettercap_spec, zphisher_spec, cyberstrike_spec, read_log_spec, payloads_spec,
         human_input_spec, report_spec,
     ]
-    _funcs = {
+    _core_funcs = {
         "run_nuclei": run_nuclei, "run_sqlmap": run_sqlmap, "run_ffuf": run_ffuf,
         "run_recon": run_recon, "generate_phish_template": generate_phish_template,
         "cleanup_temp": cleanup_temp, "run_bettercap": run_bettercap,
@@ -70,41 +50,31 @@ if not TOOL_SPECS:
         "run_payloads": run_payloads, "request_human_input": request_human_input,
         "generate_report": generate_report,
     }
-    TOOL_SPECS.extend(_specs)
-    TOOL_REGISTRY.update(_funcs)
+    TOOL_SPECS.extend(_core_specs)
+    TOOL_REGISTRY.update(_core_funcs)
 
-    # Try loading new tools manually
-    try:
-        from .nmap_scan import run as _nmap_run, TOOL_SPEC as _nmap_spec
-        TOOL_SPECS.append(_nmap_spec)
-        TOOL_REGISTRY[_nmap_spec["name"]] = _nmap_run
-    except ImportError:
-        pass
-    try:
-        from .whatweb_tool import run as _ww_run, TOOL_SPEC as _ww_spec
-        TOOL_SPECS.append(_ww_spec)
-        TOOL_REGISTRY[_ww_spec["name"]] = _ww_run
-    except ImportError:
-        pass
-    try:
-        from .screenshot import run as _ss_run, TOOL_SPEC as _ss_spec
-        TOOL_SPECS.append(_ss_spec)
-        TOOL_REGISTRY[_ss_spec["name"]] = _ss_run
-    except ImportError:
-        pass
-    try:
-        from .auth_manager import run as _auth_run, TOOL_SPEC as _auth_spec
-        TOOL_SPECS.append(_auth_spec)
-        TOOL_REGISTRY[_auth_spec["name"]] = _auth_run
-    except ImportError:
-        pass
-    try:
-        from .mission_diff import run as _diff_run, TOOL_SPEC as _diff_spec
-        TOOL_SPECS.append(_diff_spec)
-        TOOL_REGISTRY[_diff_spec["name"]] = _diff_run
-    except ImportError:
-        pass
+    # --- Optional tools (use @register_tool decorator or manual fallback) ---
+    _optional = [
+        "nmap_scan", "whatweb_tool", "screenshot",
+        "auth_manager", "mission_diff",
+        "cvss_scorer", "scope_checker",
+    ]
+    for mod_name in _optional:
+        try:
+            mod = __import__(f"tools.{mod_name}", fromlist=[mod_name])
+            # If the module uses @register_tool, it's already registered.
+            # If not, try manual registration from TOOL_SPEC + run.
+            spec = getattr(mod, "TOOL_SPEC", None)
+            run_fn = getattr(mod, "run", None)
+            if spec and run_fn and spec["name"] not in TOOL_REGISTRY:
+                TOOL_SPECS.append(spec)
+                TOOL_REGISTRY[spec["name"]] = run_fn
+        except ImportError as e:
+            logger.debug("Optional tool '%s' not available: %s", mod_name, e)
 
+
+# Auto-register all tools on import
+_import_all_tools()
 
 # Public API
 ALL_TOOLS = TOOL_SPECS

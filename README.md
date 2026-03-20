@@ -75,6 +75,8 @@ Uses Nmap, Nuclei, sqlmap, ffuf, WhatWeb, advanced reconnaissance, screenshots, 
 |---|---|
 | `generate_report` | Markdown + HTML + optional PDF report generation |
 | `compare_missions` | Diff between two sessions (new / resolved / persistent findings) |
+| `calculate_risk_score` | Aggregate CVSS risk score from collected findings |
+| `check_scope` | Verify a target is within authorized scope before acting |
 | `read_log` | Read and parse tool output files (nuclei JSONL, ffuf JSON, etc.) |
 | `request_human_input` | Pause and ask the operator a question |
 | `cleanup_temp` | Remove temporary files (preserves mission reports) |
@@ -139,6 +141,9 @@ source .venv/bin/activate
 export $(cat .env)
 python3 agent/main.py
 ```
+
+The web dashboard opens automatically in your browser at `http://localhost:5000`.
+Use `--no-dashboard` to disable auto-launch.
 
 ### Resume an interrupted mission
 
