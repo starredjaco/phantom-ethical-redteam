@@ -19,11 +19,12 @@ Uses Nmap, Nuclei, sqlmap, ffuf, WhatWeb, advanced reconnaissance, screenshots, 
 - **Stealth profiles** — 4 modes (silent/stealthy/normal/aggressive) with User-Agent rotation, timing randomization, proxy support
 - **Parallel tool execution** — multiple tools run concurrently
 - **Mission resume** — interrupted missions can be resumed from saved state (atomic state save)
-- **Web dashboard** — live charts (Chart.js), structured tables, mission summary, session replay (port 5000)
+- **Web dashboard v3** — live charts, severity filters, CSV export, keyboard shortcuts, ARIA accessibility, responsive (port 5000)
 - **Dashboard authentication** — optional API key via `PHANTOM_DASHBOARD_KEY` env var
 - **Multi-target scope** with CIDR support and strict enforcement
 - **Retry + timeout** — all LLM providers have 120s timeout and 3 retries with exponential backoff
 - **Secret redaction** — API keys, tokens, passwords automatically stripped from logs
+- **Security hardened API** — HTTP security headers (CSP, X-Frame-Options), rate limiter per IP, extended path-traversal protection
 - Full structured logging (console + file) + automatic cleanup
 - Pause every N turns — human can stop, continue, or force a report
 - **Mission diff** — compare findings between sessions (new/resolved/persistent)
@@ -177,7 +178,7 @@ python3 agent/main.py --resume 20260318_120000
 
 Phantom reloads the saved state (messages, turn count) from `logs/<session>/state.json` and continues where it left off.
 
-### Web Dashboard (v2.1)
+### Web Dashboard (v3)
 
 ```bash
 cd Phantom/web
@@ -190,8 +191,19 @@ Open `http://localhost:5000` — full monitoring dashboard with 4 tabs:
 |---|---|
 | **Terminal** | Live color-coded output with turn separators, tool timeline bar |
 | **Charts** | Findings by severity (donut), open ports (bar), tools usage (pie), HTTP status codes from ffuf (bar) — all powered by Chart.js, updated in real time |
-| **Tables** | Structured findings with severity badges, nmap ports with open/filtered/closed indicators, ffuf paths with HTTP status colors |
+| **Tables** | Structured findings with severity badges, severity filter buttons, nmap ports, ffuf paths with HTTP status colors |
 | **Mission Summary** | Auto-displayed on mission complete — stat cards (critical/high/medium/tools/turns/duration), summary charts, and agent narrative |
+
+**v3 improvements:**
+- Severity filter on findings table (All / Critical / High / Medium / Low)
+- CSV export for findings and ports (Excel-compatible with BOM)
+- Mission progress bar with live status
+- Toast notifications (success / error / warning / info)
+- Keyboard shortcuts: `R` = refresh, `C` = clear terminal, `F` = focus search
+- Full ARIA accessibility — roles, labels, live regions, skip-to-content
+- Responsive layout — 4 breakpoints (1400 / 1200 / 900 / 600px)
+- `/api/health` endpoint — status, version, mission state
+- `/api/sessions` pagination — `?page=1&limit=20`
 
 Click any past session in the sidebar to replay all charts and tables from `state.json`.
 
@@ -403,7 +415,7 @@ Phantom/
 │   ├── app.py
 │   ├── templates/
 │   └── static/
-├── tests/                      # 44 unit tests
+├── tests/                      # 52 unit tests
 ├── config.yaml.example          # Template (copied to config.yaml by installer)
 ├── prompts/system_prompt.txt
 ├── scopes/
