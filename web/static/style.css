@@ -9,10 +9,10 @@
     --border-hover: #484f58;
     --text-primary: #c9d1d9;
     --text-secondary: #8b949e;
-    --text-muted: #6e7681;
+    --text-muted: #848d97;
     --red: #f85149;
     --red-bg: #da363333;
-    --orange: #d29b00;
+    --orange: #e8a517;
     --orange-bg: #d29b0033;
     --yellow: #e3b341;
     --yellow-bg: #e3b34133;
@@ -70,11 +70,11 @@ header {
 }
 header h1 {
     color: var(--red);
-    font-size: 20px;
-    letter-spacing: 4px;
+    font-size: 24px;
+    letter-spacing: 6px;
     text-shadow: 0 0 12px rgba(248,81,73,0.3);
 }
-.subtitle { color: var(--blue); font-size: 12px; opacity: 0.85; }
+.subtitle { color: var(--blue); font-size: 13px; opacity: 1; }
 .header-right { margin-left: auto; display: flex; gap: 12px; align-items: center; }
 .status {
     padding: 3px 10px;
@@ -135,7 +135,7 @@ header h1 {
     border-bottom: 1px solid var(--bg-tertiary);
     cursor: pointer;
     font-size: 11px;
-    transition: background var(--transition), border-left var(--transition);
+    transition: background var(--transition), border-left-color var(--transition);
     border-left: 3px solid transparent;
     border-radius: 0 var(--radius) var(--radius) 0;
 }
@@ -274,7 +274,7 @@ header h1 {
     font-size: 12px;
     line-height: 1.5;
 }
-.terminal-line { padding: 1px 0; word-wrap: break-word; }
+.terminal-line { padding: 1px 0; word-wrap: break-word; animation: terminalFadeIn 0.15s ease; }
 .terminal-line.agent { color: var(--green); }
 .terminal-line.tool { color: var(--purple); }
 .terminal-line.error { color: var(--red); }
@@ -393,8 +393,12 @@ td {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    transition: background 0.15s ease;
 }
 tr:hover td { background: var(--bg-tertiary); }
+tbody tr:nth-child(even) td {
+    background: rgba(255, 255, 255, 0.02);
+}
 
 /* Severity badges in tables */
 .sev-badge {
@@ -416,6 +420,10 @@ tr:hover td { background: var(--bg-tertiary); }
 .status-open { background: var(--green-bg); color: var(--green); }
 .status-filtered { background: var(--yellow-bg); color: var(--yellow); }
 .status-closed { background: var(--red-bg); color: var(--red); }
+.status-warning {
+    background: var(--orange);
+    color: #000;
+}
 
 .http-status { padding: 2px 6px; border-radius: 3px; font-size: 10px; }
 .http-2xx { background: var(--green-bg); color: var(--green); }
@@ -482,7 +490,7 @@ tr:hover td { background: var(--bg-tertiary); }
     text-align: center;
 }
 .stat-card .stat-value { font-size: 28px; font-weight: bold; margin-bottom: 4px; }
-.stat-card .stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+.stat-card .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
 .stat-card.critical .stat-value { color: var(--red); }
 .stat-card.high .stat-value { color: var(--orange); }
 .stat-card.medium .stat-value { color: var(--yellow); }
@@ -616,6 +624,10 @@ tr:hover td { background: var(--bg-tertiary); }
 .filter-btn[data-sev="medium"].active-filter { background: var(--yellow); color: #000; }
 .filter-btn[data-sev="low"].active-filter { background: var(--blue); }
 .filter-btn[data-sev="info"].active-filter { background: var(--text-muted); }
+.filter-btn:hover:not(.active-filter) {
+    background: var(--border);
+    color: var(--text-primary);
+}
 
 /* Export button row */
 .export-row {
@@ -642,6 +654,44 @@ tr:hover td { background: var(--bg-tertiary); }
     padding: 1px 5px;
     font-size: 10px;
     font-family: inherit;
+}
+
+/* Empty states */
+.empty-state {
+    text-align: center;
+    padding: 24px 16px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-style: italic;
+}
+
+.timeline-bar:empty::after {
+    content: 'No tools executed yet';
+    color: var(--text-muted);
+    font-size: 11px;
+    font-style: italic;
+    padding: 4px 8px;
+    display: block;
+}
+
+/* Loading spinner */
+.loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes terminalFadeIn {
+    from { opacity: 0.4; }
+    to { opacity: 1; }
 }
 
 /* Footer */

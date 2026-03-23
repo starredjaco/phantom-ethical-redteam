@@ -1,6 +1,7 @@
 """Phantom Web Dashboard — Flask + SocketIO with structured data."""
 
 import collections
+import hmac
 import os
 import re
 import sys
@@ -12,10 +13,13 @@ import functools
 from pathlib import Path
 from datetime import datetime
 
-from flask import Flask, render_template, jsonify, request, send_file
+from flask import Flask, render_template, jsonify, request, send_file, make_response
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOGS_DIR = PROJECT_ROOT / "logs"
+
+# Fix #2: Move sys.path.insert to module level (out of run_mission thread)
+sys.path.insert(0, str(PROJECT_ROOT))
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +40,8 @@ def require_auth(f):
         if not DASHBOARD_KEY:
             return f(*args, **kwargs)
         provided = request.args.get("key") or request.headers.get("X-API-Key", "")
-        if provided != DASHBOARD_KEY:
+        # Fix #6: Timing-safe comparison
+        if not hmac.compare_digest(provided, DASHBOARD_KEY):
             return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
     return wrapper
@@ -44,7 +49,7 @@ def require_auth(f):
 
 # Only import CORS/SocketIO after app is created
 from flask_cors import CORS
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, emit
 
 # Restrict CORS to localhost by default; override with PHANTOM_CORS_ORIGIN
 _cors_origin = os.environ.get("PHANTOM_CORS_ORIGIN", "http://localhost:*")
@@ -82,18 +87,26 @@ _rate_store: dict = collections.defaultdict(list)
 _RATE_WINDOW = 60   # seconds
 _RATE_MAX = int(os.environ.get("PHANTOM_RATE_LIMIT", "120"))  # requests per window
 
+# Fix #5: Thread-safe rate limiter with memory leak prevention
+_rate_lock = threading.Lock()
+
 
 def _is_rate_limited(ip: str) -> bool:
     """Return True if the given IP has exceeded the rate limit."""
-    now = time.time()
-    window_start = now - _RATE_WINDOW
-    calls = _rate_store[ip]
-    # Prune old entries
-    _rate_store[ip] = [t for t in calls if t > window_start]
-    if len(_rate_store[ip]) >= _RATE_MAX:
-        return True
-    _rate_store[ip].append(now)
-    return False
+    with _rate_lock:
+        now = time.time()
+        _rate_store[ip] = [t for t in _rate_store[ip] if now - t < _RATE_WINDOW]
+        if not _rate_store[ip]:
+            del _rate_store[ip]
+            return False
+        # Evict oldest IP if store grows too large
+        if len(_rate_store) > 10000:
+            oldest_ip = min(_rate_store, key=lambda k: _rate_store[k][0] if _rate_store[k] else 0)
+            del _rate_store[oldest_ip]
+        if len(_rate_store.get(ip, [])) >= _RATE_MAX:
+            return True
+        _rate_store[ip].append(now)
+        return False
 
 
 @app.before_request
@@ -107,6 +120,28 @@ def check_rate_limit():
 # Track running mission
 _mission_thread = None
 _mission_stop = threading.Event()
+
+# Fix #4: Threading lock for mission thread
+_mission_lock = threading.Lock()
+
+
+# ---------------------------------------------------------------------------
+# CSRF Origin check helper
+# ---------------------------------------------------------------------------
+
+def _check_origin():
+    """Fix #7: Validate Origin/Referer header on mutating requests."""
+    origin = request.headers.get("Origin") or request.headers.get("Referer", "")
+    host = os.environ.get("PHANTOM_DASHBOARD_HOST", "127.0.0.1")
+    port = int(os.environ.get("PHANTOM_DASHBOARD_PORT", "5000"))
+    allowed = [
+        f"http://{host}:{port}",
+        f"http://localhost:{port}",
+        f"http://127.0.0.1:{port}",
+    ]
+    if not any(origin.startswith(a) for a in allowed):
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -456,6 +491,7 @@ def read_state(session_id):
 @app.route("/api/sessions/<session_id>/report")
 @require_auth
 def get_report(session_id):
+    """Fix #9: Serve report with Content-Disposition and sandboxed CSP."""
     safe_session = os.path.basename(session_id)
     if safe_session != session_id or ".." in session_id or session_id.startswith("/"):
         return jsonify({"error": "Invalid session id"}), 400
@@ -465,7 +501,9 @@ def get_report(session_id):
     reports = sorted(session_dir.glob("report_*.html"), reverse=True)
     if not reports:
         return jsonify({"error": "No report found"}), 404
-    return send_file(reports[0])
+    response = make_response(send_file(reports[0], as_attachment=False, mimetype="text/html"))
+    response.headers["Content-Security-Policy"] = "sandbox"
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -476,21 +514,26 @@ def get_report(session_id):
 @require_auth
 def start_mission():
     global _mission_thread
-    if _mission_thread and _mission_thread.is_alive():
-        return jsonify({"error": "A mission is already running"}), 409
 
-    _mission_stop.clear()
+    # Fix #7: CSRF origin check
+    if not _check_origin():
+        return jsonify({"error": "Forbidden: invalid origin"}), 403
+
     data = request.json or {}
 
     def run_mission():
         socketio.emit("mission_status", {"status": "running"})
         try:
-            sys.path.insert(0, str(PROJECT_ROOT / "agent"))
-            os.chdir(PROJECT_ROOT)
+            # Fix #1: No os.chdir — use absolute paths everywhere
+            # Fix #2: sys.path.insert moved to module level
 
             import yaml
             with open(PROJECT_ROOT / "config.yaml") as f:
                 config = yaml.safe_load(f)
+
+            # Fix #3: Override provider from request
+            if data.get("provider"):
+                config["provider"] = data["provider"]
 
             # Override scope if provided from UI
             scope_text = data.get("scope", "").strip()
@@ -641,18 +684,29 @@ def start_mission():
         except Exception as e:
             import traceback
             logger.error("Mission failed:\n%s", traceback.format_exc())
+            # Fix #8: Don't leak exception type to client
             socketio.emit("mission_error", {
-                "error": f"Mission failed: {type(e).__name__}. Check server logs for details.",
+                "error": "Mission failed unexpectedly",
             })
 
-    _mission_thread = threading.Thread(target=run_mission, daemon=True)
-    _mission_thread.start()
+    _mission_stop.clear()
+
+    # Fix #4: Use threading lock to prevent race conditions
+    with _mission_lock:
+        if _mission_thread and _mission_thread.is_alive():
+            return jsonify({"error": "Mission already running"}), 409
+        _mission_thread = threading.Thread(target=run_mission, daemon=True)
+        _mission_thread.start()
+
     return jsonify({"status": "started"})
 
 
 @app.route("/api/missions/stop", methods=["POST"])
 @require_auth
 def stop_mission():
+    # Fix #7: CSRF origin check
+    if not _check_origin():
+        return jsonify({"error": "Forbidden: invalid origin"}), 403
     _mission_stop.set()
     return jsonify({"status": "stopping"})
 
@@ -661,10 +715,12 @@ def stop_mission():
 def on_connect():
     if DASHBOARD_KEY:
         provided = request.args.get("key", "")
-        if provided != DASHBOARD_KEY:
+        # Fix #6: Timing-safe comparison
+        if not hmac.compare_digest(provided, DASHBOARD_KEY):
             return False  # Reject WebSocket connection
     running = _mission_thread is not None and _mission_thread.is_alive()
-    socketio.emit("connected", {"status": "ok", "mission_running": running})
+    # Fix #10: Emit to specific client only, not broadcast
+    emit("connected", {"status": "ok", "mission_running": running}, to=request.sid)
 
 
 if __name__ == "__main__":

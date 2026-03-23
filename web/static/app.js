@@ -1,7 +1,5 @@
 // Phantom Dashboard v3 — Live monitoring with charts, tables, toasts & export
 
-const socket = io();
-
 // ---- State ----
 let toolTimeline = [];
 let findings = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
@@ -19,6 +17,8 @@ let chartSeverity = null;
 let chartPorts = null;
 let chartTools = null;
 let chartFfuf = null;
+let summaryChartSev = null;
+let summaryChartTools = null;
 
 const COLORS = {
     critical: '#f85149',
@@ -28,127 +28,8 @@ const COLORS = {
     info: '#6e7681',
 };
 
-// ---- WebSocket Events ----
-
-socket.on("connect", () => {
-    setStatus("Connected", true);
-    toast("Connected to dashboard", "success", 2500);
-});
-
-socket.on("disconnect", () => {
-    setStatus("Disconnected", false);
-    toast("Dashboard disconnected", "error", 4000);
-    setMissionProgress(false);
-});
-
-socket.on("connected", (data) => {
-    setStatus("Connected", true);
-    if (data.mission_running) {
-        document.getElementById("btn-launch").disabled = true;
-        document.getElementById("btn-stop").disabled = false;
-        startTimer();
-        setMissionProgress(true);
-        toast("Mission already in progress", "info");
-    }
-});
-
-socket.on("session_started", (data) => {
-    addTerminalLine("Session: " + data.session, "system");
-    loadSessions();
-});
-
-socket.on("turn_start", (data) => {
-    currentTurn = data.turn;
-    document.getElementById("turn-badge").textContent = "Turn " + data.turn;
-    addTerminalLine("--- Turn " + data.turn + " ---", "turn-separator");
-});
-
-socket.on("agent_output", (data) => {
-    addTerminalLine(data.text, data.type || "agent");
-});
-
-socket.on("tool_start", (data) => {
-    const inputStr = JSON.stringify(data.input || {});
-    const short = inputStr.length > 80 ? inputStr.slice(0, 80) + "..." : inputStr;
-    addTerminalLine("[TOOL] " + data.name + "(" + short + ")", "tool");
-    addTimelineItem(data.name, data.id, "running");
-
-    // Track tool usage
-    toolsUsed[data.name] = (toolsUsed[data.name] || 0) + 1;
-    updateToolsChart();
-});
-
-socket.on("tool_result", (data) => {
-    const preview = data.content.length > 200 ? data.content.slice(0, 200) + "..." : data.content;
-    addTerminalLine("[RESULT:" + (data.name || "?") + "] " + preview, "result");
-    updateTimelineItem(data.id, "done", data.duration);
-});
-
-socket.on("tool_data", (data) => {
-    if (data.label === "nmap" && data.data && data.data.ports) {
-        data.data.ports.forEach(p => {
-            portsData.push(p);
-            addPortRow(p);
-        });
-        updatePortsChart();
-    }
-    if (data.label === "ffuf" && Array.isArray(data.data)) {
-        data.data.forEach(r => {
-            ffufData.push(r);
-            addFfufRow(r);
-        });
-        updateFfufChart();
-    }
-});
-
-socket.on("finding", (data) => {
-    const sev = (data.severity || "info").toLowerCase();
-    if (findings[sev] !== undefined) findings[sev]++;
-    updateFindingsBadges();
-
-    findingsList.push(data);
-    addFindingEntry(data);
-    addFindingRow(data);
-    updateSeverityChart();
-
-    if (sev === "critical") {
-        toast("CRITICAL finding: " + (data.template || data.url || "New finding"), "error", 6000);
-    } else if (sev === "high") {
-        toast("HIGH finding: " + (data.template || data.url || "New finding"), "warning", 4000);
-    }
-});
-
-socket.on("mission_complete", (data) => {
-    addTerminalLine("=== MISSION COMPLETE ===", "system");
-    document.getElementById("btn-launch").disabled = false;
-    document.getElementById("btn-stop").disabled = true;
-    stopTimer();
-    setMissionProgress(false);
-    loadSessions();
-    showMissionSummary(data);
-    switchTab(document.querySelector('[data-tab="summary-tab"]'));
-    const total = findings.critical + findings.high + findings.medium + findings.low + findings.info;
-    toast("Mission complete — " + total + " findings in " + (data.turns || currentTurn) + " turns", "success", 8000);
-});
-
-socket.on("mission_error", (data) => {
-    addTerminalLine("[ERROR] " + data.error, "error");
-    if (data.traceback) {
-        addTerminalLine(data.traceback, "error");
-    }
-    document.getElementById("btn-launch").disabled = false;
-    document.getElementById("btn-stop").disabled = true;
-    stopTimer();
-    setMissionProgress(false);
-    toast("Mission error: " + data.error, "error", 8000);
-});
-
-socket.on("mission_status", (data) => {
-    if (data.status === "running") {
-        addTerminalLine("Mission started.", "system");
-        setMissionProgress(true);
-    }
-});
+// socket is initialized inside DOMContentLoaded after CDN check
+let socket = null;
 
 
 // ---- Toast Notifications ----
@@ -217,6 +98,7 @@ function addTimelineItem(name, id, status) {
     bar.appendChild(item);
     toolTimeline.push(item);
     while (bar.children.length > 50) bar.removeChild(bar.firstChild);
+    toolTimeline = toolTimeline.slice(-50);
 }
 
 function updateTimelineItem(id, status, duration) {
@@ -261,6 +143,16 @@ function addFindingEntry(f) {
 }
 
 
+// ---- Empty State Management ----
+
+function updateEmptyStates() {
+    document.querySelectorAll('tbody').forEach(tbody => {
+        const empty = tbody.parentElement.querySelector('.empty-state');
+        if (empty) empty.style.display = tbody.children.length === 0 ? 'block' : 'none';
+    });
+}
+
+
 // ---- Severity Filter ----
 
 function filterFindings(sev) {
@@ -298,6 +190,7 @@ function addFindingRow(f) {
     if (activeFilter !== "all" && sev !== activeFilter) {
         row.style.display = "none";
     }
+    updateEmptyStates();
 }
 
 function addPortRow(p) {
@@ -311,6 +204,7 @@ function addPortRow(p) {
         '<td>' + escapeHtml(p.service || "") + '</td>' +
         '<td title="' + escapeHtml(p.version || "") + '">' + escapeHtml(p.version || "") + '</td>';
     tbody.appendChild(row);
+    updateEmptyStates();
 }
 
 function addFfufRow(r) {
@@ -324,6 +218,7 @@ function addFfufRow(r) {
         '<td>' + (r.size || 0) + '</td>' +
         '<td>' + (r.words || 0) + '</td>';
     tbody.appendChild(row);
+    updateEmptyStates();
 }
 
 
@@ -385,6 +280,8 @@ function exportPortsCSV() {
 // ---- Charts ----
 
 function initCharts() {
+    if (typeof Chart === 'undefined') return;
+
     const defaults = Chart.defaults;
     defaults.color = '#8b949e';
     defaults.borderColor = '#30363d';
@@ -575,11 +472,14 @@ function showMissionSummary(data) {
 
     panel.innerHTML = html;
 
-    // Render summary charts
+    // Render summary charts (guard for Chart.js availability)
+    if (typeof Chart === 'undefined') return;
+
     setTimeout(() => {
         const ctxSev = document.getElementById("summary-chart-sev");
         if (ctxSev) {
-            new Chart(ctxSev, {
+            if (summaryChartSev) summaryChartSev.destroy();
+            summaryChartSev = new Chart(ctxSev, {
                 type: "doughnut",
                 data: {
                     labels: ["Critical", "High", "Medium", "Low", "Info"],
@@ -597,7 +497,8 @@ function showMissionSummary(data) {
         }
         const ctxTools = document.getElementById("summary-chart-tools");
         if (ctxTools && Object.keys(toolsUsed).length > 0) {
-            new Chart(ctxTools, {
+            if (summaryChartTools) summaryChartTools.destroy();
+            summaryChartTools = new Chart(ctxTools, {
                 type: "pie",
                 data: {
                     labels: Object.keys(toolsUsed),
@@ -646,6 +547,7 @@ function switchTab(el) {
 // ---- Timer ----
 
 function startTimer() {
+    if (timerInterval) clearInterval(timerInterval);
     missionStartTime = Date.now();
     timerInterval = setInterval(() => {
         const elapsed = Math.floor((Date.now() - missionStartTime) / 1000);
@@ -697,7 +599,7 @@ function startMission() {
         }),
     })
     .then(r => {
-        if (!r.ok && r.status === 429) throw new Error("Rate limited — please wait.");
+        if (!r.ok) return r.text().then(t => { throw new Error("Launch failed (" + r.status + "): " + t); });
         return r.json();
     })
     .then(data => {
@@ -721,12 +623,19 @@ function startMission() {
 }
 
 function stopMission() {
+    document.getElementById('btn-stop').disabled = true;
     fetch("/api/missions/stop", { method: "POST" })
-    .then(() => {
-        addTerminalLine("Stop requested...", "system");
-        toast("Stop signal sent", "warning", 3000);
+    .then(r => {
+        if (!r.ok) throw new Error("Stop failed (" + r.status + ")");
+        return r.json();
     })
-    .catch(err => toast("Stop request failed: " + err, "error"));
+    .then(() => {
+        toast("Stop signal sent.", "warning");
+    })
+    .catch(e => {
+        toast(e.message, "error");
+        document.getElementById('btn-stop').disabled = false;
+    });
 }
 
 function resetState() {
@@ -758,12 +667,15 @@ function resetState() {
     if (chartPorts) { chartPorts.data.labels = []; chartPorts.data.datasets[0].data = []; chartPorts.update(); }
     if (chartTools) { chartTools.data.labels = []; chartTools.data.datasets[0].data = []; chartTools.update(); }
     if (chartFfuf) { chartFfuf.data.labels = []; chartFfuf.data.datasets[0].data = []; chartFfuf.update(); }
+    updateEmptyStates();
 }
 
 
 // ---- Session Management ----
 
 function loadSessions() {
+    const list = document.getElementById("session-list");
+    list.innerHTML = '<div class="loading-spinner"></div>';
     fetch("/api/sessions?limit=50")
     .then(r => {
         if (!r.ok) throw new Error("HTTP " + r.status);
@@ -772,7 +684,6 @@ function loadSessions() {
     .then(data => {
         // Support both paginated {sessions: [...]} and legacy flat array
         const sessions = Array.isArray(data) ? data : (data.sessions || []);
-        const list = document.getElementById("session-list");
         list.innerHTML = "";
         if (!sessions.length) {
             list.innerHTML = '<div style="color:var(--text-muted);font-size:11px;padding:6px">No sessions yet</div>';
@@ -792,7 +703,9 @@ function loadSessions() {
             list.appendChild(item);
         });
     })
-    .catch(err => console.warn("loadSessions error:", err));
+    .catch(() => {
+        list.innerHTML = '<div class="empty-state">Failed to load sessions</div>';
+    });
 }
 
 function loadSession(sessionId, el) {
@@ -810,6 +723,7 @@ function loadSession(sessionId, el) {
             return;
         }
 
+        // Reset state only after successful fetch
         resetState();
 
         if (data.findings) {
@@ -873,6 +787,7 @@ function loadSession(sessionId, el) {
 
         switchTab(document.querySelector('[data-tab="charts-tab"]'));
         toast("Session " + sessionId + " loaded", "success", 2500);
+        updateEmptyStates();
     })
     .catch(() => {
         // Fallback: load log file
@@ -930,13 +845,172 @@ function escapeHtml(text) {
     if (text == null) return "";
     const div = document.createElement("div");
     div.textContent = String(text);
-    return div.innerHTML;
+    let safe = div.innerHTML;
+    safe = safe.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return safe;
 }
 
 
 // ---- Init ----
 
 document.addEventListener("DOMContentLoaded", () => {
-    initCharts();
+    // CDN fallback check — Socket.IO
+    if (typeof io === 'undefined') {
+        document.querySelector('.main-area').innerHTML =
+            '<div class="empty-state">Socket.IO failed to load. Check your network or CDN access.</div>';
+        return;
+    }
+
+    // CDN fallback check — Chart.js
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js not loaded — charts disabled');
+    }
+
+    // Connect Socket.IO with API key from query string
+    const apiKey = new URLSearchParams(window.location.search).get('key') || '';
+    socket = io({ query: { key: apiKey } });
+
+    // ---- WebSocket Events ----
+
+    socket.on("connect", () => {
+        setStatus("Connected", true);
+        toast("Connected to dashboard", "success", 2500);
+    });
+
+    socket.on("disconnect", () => {
+        setStatus("Disconnected", false);
+        toast("Dashboard disconnected", "error", 4000);
+        setMissionProgress(false);
+    });
+
+    socket.on("connected", (data) => {
+        setStatus("Connected", true);
+        if (data.mission_running) {
+            document.getElementById("btn-launch").disabled = true;
+            document.getElementById("btn-stop").disabled = false;
+            startTimer();
+            setMissionProgress(true);
+            toast("Mission already in progress", "info");
+        }
+    });
+
+    socket.on("session_started", (data) => {
+        addTerminalLine("Session: " + data.session, "system");
+        loadSessions();
+    });
+
+    socket.on("turn_start", (data) => {
+        currentTurn = data.turn;
+        document.getElementById("turn-badge").textContent = "Turn " + data.turn;
+        addTerminalLine("--- Turn " + data.turn + " ---", "turn-separator");
+    });
+
+    socket.on("agent_output", (data) => {
+        addTerminalLine(data.text, data.type || "agent");
+    });
+
+    socket.on("tool_start", (data) => {
+        const inputStr = JSON.stringify(data.input || {});
+        const short = inputStr.length > 80 ? inputStr.slice(0, 80) + "..." : inputStr;
+        addTerminalLine("[TOOL] " + data.name + "(" + short + ")", "tool");
+        addTimelineItem(data.name, data.id, "running");
+
+        // Track tool usage
+        toolsUsed[data.name] = (toolsUsed[data.name] || 0) + 1;
+        updateToolsChart();
+    });
+
+    socket.on("tool_result", (data) => {
+        const content = data.content || '';
+        const display = content.length > 200 ? content.slice(0, 200) + "..." : content;
+        addTerminalLine("[RESULT:" + (data.name || "?") + "] " + display, "result");
+        updateTimelineItem(data.id, "done", data.duration);
+    });
+
+    socket.on("tool_data", (data) => {
+        if (data.label === "nmap" && data.data && data.data.ports) {
+            data.data.ports.forEach(p => {
+                portsData.push(p);
+                addPortRow(p);
+            });
+            updatePortsChart();
+        }
+        if (data.label === "ffuf" && Array.isArray(data.data)) {
+            data.data.forEach(r => {
+                ffufData.push(r);
+                addFfufRow(r);
+            });
+            updateFfufChart();
+        }
+    });
+
+    socket.on("finding", (data) => {
+        const sev = (data.severity || "info").toLowerCase();
+        if (findings[sev] !== undefined) findings[sev]++;
+        updateFindingsBadges();
+
+        findingsList.push(data);
+        addFindingEntry(data);
+        addFindingRow(data);
+        updateSeverityChart();
+
+        if (sev === "critical") {
+            toast("CRITICAL finding: " + (data.template || data.url || "New finding"), "error", 6000);
+        } else if (sev === "high") {
+            toast("HIGH finding: " + (data.template || data.url || "New finding"), "warning", 4000);
+        }
+    });
+
+    socket.on("mission_complete", (data) => {
+        addTerminalLine("=== MISSION COMPLETE ===", "system");
+        document.getElementById("btn-launch").disabled = false;
+        document.getElementById("btn-stop").disabled = true;
+        stopTimer();
+        setMissionProgress(false);
+        loadSessions();
+        showMissionSummary(data);
+        switchTab(document.querySelector('[data-tab="summary-tab"]'));
+        const total = findings.critical + findings.high + findings.medium + findings.low + findings.info;
+        toast("Mission complete — " + total + " findings in " + (data.turns || currentTurn) + " turns", "success", 8000);
+    });
+
+    socket.on("mission_error", (data) => {
+        addTerminalLine("[ERROR] " + data.error, "error");
+        if (data.traceback) {
+            addTerminalLine(data.traceback, "error");
+        }
+        document.getElementById("btn-launch").disabled = false;
+        document.getElementById("btn-stop").disabled = true;
+        stopTimer();
+        setMissionProgress(false);
+        toast("Mission error: " + data.error, "error", 8000);
+    });
+
+    socket.on("mission_status", (data) => {
+        if (data.status === "running") {
+            addTerminalLine("Mission started.", "system");
+            setMissionProgress(true);
+        }
+    });
+
+    // ---- Reconnection feedback ----
+
+    socket.on("reconnect_attempt", () => {
+        document.getElementById("status-badge").textContent = "Reconnecting...";
+        document.getElementById("status-badge").className = "status-badge status-warning";
+    });
+
+    socket.on("reconnect", () => {
+        document.getElementById("status-badge").textContent = "Connected";
+        document.getElementById("status-badge").className = "status-badge status-ok";
+        toast("Reconnected", "success");
+    });
+
+    // ---- Init charts & sessions ----
+
+    if (typeof Chart !== 'undefined') {
+        initCharts();
+    }
     loadSessions();
+    updateEmptyStates();
 });

@@ -21,7 +21,7 @@
     </div>
     <iframe id="report-frame" src="/api/sessions/{{ session_id }}/report"></iframe>
     <script>
-        const sid = "{{ session_id }}";
+        const sid = {{ session_id | tojson }};
         document.getElementById("download-html").href = `/api/sessions/${sid}/report`;
         // MD download would need a separate endpoint
         fetch(`/api/sessions/${sid}`).then(r => r.json()).then(data => {

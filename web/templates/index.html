@@ -6,7 +6,6 @@
     <meta name="description" content="Phantom Ethical Red Team — Mission Control Dashboard">
     <title>Phantom - Ethical Red Team Dashboard</title>
     <link rel="stylesheet" href="/static/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -70,16 +69,21 @@
                 </div>
             </section>
 
+            <!-- Replay mode banner (shown by app.js when viewing historical session) -->
+            <div id="replay-banner" class="empty-state" style="display:none; background: var(--bg-tertiary); padding: 8px; text-align: center; font-size: 12px;">
+                Viewing historical session — <a href="#" onclick="location.reload(); return false;" style="color: var(--blue);">Return to live view</a>
+            </div>
+
             <!-- Tab Navigation -->
             <div class="tabs" role="tablist" aria-label="Dashboard panels">
-                <button class="tab active" role="tab" aria-selected="true" data-tab="terminal-tab" onclick="switchTab(this)">Terminal</button>
-                <button class="tab" role="tab" aria-selected="false" data-tab="charts-tab" onclick="switchTab(this)">Charts</button>
-                <button class="tab" role="tab" aria-selected="false" data-tab="tables-tab" onclick="switchTab(this)">Tables</button>
-                <button class="tab" role="tab" aria-selected="false" data-tab="summary-tab" onclick="switchTab(this)">Summary</button>
+                <button class="tab active" role="tab" id="tab-terminal" aria-selected="true" aria-controls="panel-terminal" data-tab="terminal-tab" onclick="switchTab(this)">Terminal</button>
+                <button class="tab" role="tab" id="tab-charts" aria-selected="false" aria-controls="panel-charts" data-tab="charts-tab" onclick="switchTab(this)">Charts</button>
+                <button class="tab" role="tab" id="tab-tables" aria-selected="false" aria-controls="panel-tables" data-tab="tables-tab" onclick="switchTab(this)">Tables</button>
+                <button class="tab" role="tab" id="tab-summary" aria-selected="false" aria-controls="panel-summary" data-tab="summary-tab" onclick="switchTab(this)">Summary</button>
             </div>
 
             <!-- Tab: Terminal -->
-            <div class="tab-content active" id="terminal-tab" role="tabpanel">
+            <div class="tab-content active" id="terminal-tab" role="tabpanel" aria-labelledby="tab-terminal">
                 <div class="terminal" id="terminal">
                     <div class="terminal-header">
                         <span>Live Output</span>
@@ -88,7 +92,7 @@
                             <button class="btn btn-small" onclick="clearTerminal()" aria-label="Clear terminal">Clear</button>
                         </div>
                     </div>
-                    <div class="terminal-body" id="terminal-body" role="log" aria-live="polite" aria-atomic="false">
+                    <div class="terminal-body" id="terminal-body" role="log" aria-atomic="false">
                         <div class="terminal-line system">Phantom Dashboard ready. Configure scope and launch a mission.</div>
                     </div>
                 </div>
@@ -96,34 +100,40 @@
                 <!-- Tool Timeline -->
                 <div class="timeline" id="timeline" aria-label="Tool execution timeline">
                     <h3>Tool Execution Timeline</h3>
-                    <div class="timeline-bar" id="timeline-bar" role="list"></div>
+                    <div class="timeline-bar" id="timeline-bar" role="list">
+                        <div class="empty-state timeline-empty">Tool calls will appear here during a mission.</div>
+                    </div>
                 </div>
             </div>
 
             <!-- Tab: Charts -->
-            <div class="tab-content" id="charts-tab" role="tabpanel">
+            <div class="tab-content" id="charts-tab" role="tabpanel" aria-labelledby="tab-charts">
                 <div class="charts-grid">
                     <div class="chart-card">
                         <h3>Findings by Severity</h3>
                         <canvas id="chart-severity" aria-label="Findings by severity chart"></canvas>
+                        <div class="empty-state chart-empty">No data to display</div>
                     </div>
                     <div class="chart-card">
                         <h3>Open Ports</h3>
                         <canvas id="chart-ports" aria-label="Open ports chart"></canvas>
+                        <div class="empty-state chart-empty">No data to display</div>
                     </div>
                     <div class="chart-card">
                         <h3>Tools Used</h3>
                         <canvas id="chart-tools" aria-label="Tools usage chart"></canvas>
+                        <div class="empty-state chart-empty">No data to display</div>
                     </div>
                     <div class="chart-card">
                         <h3>HTTP Status Codes (ffuf)</h3>
                         <canvas id="chart-ffuf" aria-label="HTTP status codes chart"></canvas>
+                        <div class="empty-state chart-empty">No data to display</div>
                     </div>
                 </div>
             </div>
 
             <!-- Tab: Tables -->
-            <div class="tab-content" id="tables-tab" role="tabpanel">
+            <div class="tab-content" id="tables-tab" role="tabpanel" aria-labelledby="tab-tables">
                 <div class="table-section">
                     <h3>Findings</h3>
                     <!-- Severity filter -->
@@ -149,6 +159,7 @@
                             </thead>
                             <tbody></tbody>
                         </table>
+                        <div class="empty-state">No findings yet. Launch a mission to see results.</div>
                     </div>
                 </div>
                 <div class="table-section">
@@ -166,6 +177,7 @@
                             </thead>
                             <tbody></tbody>
                         </table>
+                        <div class="empty-state">No ports scanned yet.</div>
                     </div>
                 </div>
                 <div class="table-section">
@@ -182,6 +194,7 @@
                             </thead>
                             <tbody></tbody>
                         </table>
+                        <div class="empty-state">No paths discovered yet.</div>
                     </div>
                 </div>
                 <div class="export-row">
@@ -191,7 +204,7 @@
             </div>
 
             <!-- Tab: Mission Summary -->
-            <div class="tab-content" id="summary-tab" role="tabpanel">
+            <div class="tab-content" id="summary-tab" role="tabpanel" aria-labelledby="tab-summary">
                 <div class="summary-panel" id="summary-panel">
                     <div class="summary-placeholder" role="status">
                         No mission completed yet. Launch a mission to see the summary here.
@@ -222,7 +235,11 @@
     <!-- Toast container -->
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="false"></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+    <!-- TODO: Add integrity="sha384-..." SRI hashes for CDN scripts. Generate with: curl <url> | openssl dgst -sha384 -binary | openssl base64 -A -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
+            crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"
+            crossorigin="anonymous"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>
