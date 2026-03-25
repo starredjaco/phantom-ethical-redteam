@@ -10,7 +10,7 @@ from .logs_helper import log_path
 logger = logging.getLogger(__name__)
 
 
-def run(target: str, templates: str = "http/cves", severity: str = "critical") -> str:
+def run(target: str, templates: str = "http/cves", severity: str = "critical,high") -> str:
     guard = scope_guard(target)
     if guard:
         return guard
@@ -59,7 +59,7 @@ def run(target: str, templates: str = "http/cves", severity: str = "critical") -
         return summary.strip()
 
     except FileNotFoundError:
-        return "Nuclei not found. Run the installer or download from github.com/projectdiscovery/nuclei"
+        return "[TOOL OK, BINARY MISSING] nuclei is not installed on this system. Install with: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest or download from github.com/projectdiscovery/nuclei/releases. This does NOT mean the run_nuclei tool is unavailable — it just needs the nuclei binary."
     except Exception as e:
         logger.error("Nuclei error: %s", e)
         return f"Nuclei error: {str(e)}"
@@ -73,7 +73,7 @@ TOOL_SPEC = {
         "properties": {
             "target": {"type": "string"},
             "templates": {"type": "string", "default": "http/cves"},
-            "severity": {"type": "string", "default": "critical"},
+            "severity": {"type": "string", "default": "critical,high", "description": "Comma-separated severities (e.g. critical,high,medium)"},
         },
         "required": ["target"],
     },

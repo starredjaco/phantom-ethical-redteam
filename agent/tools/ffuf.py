@@ -25,13 +25,39 @@ def _find_wordlist() -> str:
     return "/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt"
 
 
+# Allowed base directories for wordlists — prevent reading arbitrary files
+_ALLOWED_WORDLIST_DIRS = (
+    os.path.abspath(WORDLISTS_DIR),
+    "/usr/share/wordlists",
+    "/usr/share/seclists",
+)
+
+
+def _is_safe_wordlist(path: str) -> bool:
+    """Check that a wordlist path resolves inside an allowed directory."""
+    resolved = os.path.abspath(path)
+    return any(resolved.startswith(d) for d in _ALLOWED_WORDLIST_DIRS)
+
+
 def run(url: str, wordlist: str = "") -> str:
+    # Validate URL scheme to prevent argument injection
+    if not url.startswith(("http://", "https://")):
+        return "Invalid URL: must start with http:// or https://"
+
     guard = scope_guard(url)
     if guard:
         return guard
 
     if not wordlist:
         wordlist = _find_wordlist()
+    else:
+        # Validate user-supplied wordlist against path traversal
+        if not _is_safe_wordlist(wordlist):
+            return (
+                f"BLOCKED: Wordlist path '{wordlist}' is outside allowed directories. "
+                f"Allowed: {', '.join(_ALLOWED_WORDLIST_DIRS)}. "
+                "This prevents reading arbitrary system files."
+            )
 
     output_path = log_path("ffuf.json")
     cmd = [

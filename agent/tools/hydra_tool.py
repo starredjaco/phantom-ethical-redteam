@@ -1,8 +1,11 @@
 """Brute force authentication — wraps Hydra CLI with Python HTTP fallback."""
 
 import logging
+import os
+import stat
 import subprocess
 import re
+import tempfile
 
 from .scope_checker import scope_guard
 from .logs_helper import log_path
@@ -93,29 +96,35 @@ def run(target: str, service: str = "http-form", userlist: str = "", passlist: s
     usernames = list(dict.fromkeys([c[0] for c in all_creds]))
     passwords = list(dict.fromkeys([c[1] for c in all_creds]))
 
+    # Validate hostname to prevent argument injection into hydra
+    _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9._\-]+$")
+    if not _HOSTNAME_RE.match(hostname):
+        return f"Invalid hostname '{hostname}'. Only alphanumeric, dots, hyphens, underscores allowed."
+    if hostname.startswith("-"):
+        return f"Invalid hostname '{hostname}'. Must not start with a dash."
+
+    # Validate service against allowlist to prevent argument injection
+    ALLOWED_SERVICES = {"ssh", "ftp", "mysql", "rdp", "smb", "telnet", "vnc", "http-form"}
+    if service not in ALLOWED_SERVICES:
+        return f"Invalid service '{service}'. Allowed: {', '.join(sorted(ALLOWED_SERVICES))}"
+
     # Try Hydra CLI first
     if service in ("ssh", "ftp", "mysql", "rdp", "smb", "telnet", "vnc"):
-        cmd = [
-            "hydra", "-L", "-", "-P", "-",
-            hostname, service,
-        ]
-        if port:
-            cmd.extend(["-s", port])
-        cmd.extend(["-o", output_path, "-t", "4", "-f"])
-
-        user_input = "\n".join(usernames[:20])
-        pass_input = "\n".join(passwords[:20])
-        stdin_data = None
-
+        user_file = None
+        pass_file = None
         try:
-            # Write temp credential files
-            import tempfile, os
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as uf:
+            # Write temp credential files with restricted permissions (owner-only read/write)
+            fd_u, user_file = tempfile.mkstemp(suffix=".txt", prefix="phantom_users_")
+            fd_p, pass_file = tempfile.mkstemp(suffix=".txt", prefix="phantom_pass_")
+
+            # Set restrictive permissions before writing content (owner read/write only)
+            os.chmod(user_file, stat.S_IRUSR | stat.S_IWUSR)
+            os.chmod(pass_file, stat.S_IRUSR | stat.S_IWUSR)
+
+            with os.fdopen(fd_u, "w") as uf:
                 uf.write("\n".join(usernames[:20]))
-                user_file = uf.name
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as pf:
+            with os.fdopen(fd_p, "w") as pf:
                 pf.write("\n".join(passwords[:20]))
-                pass_file = pf.name
 
             cmd = [
                 "hydra", "-L", user_file, "-P", pass_file,
@@ -128,24 +137,35 @@ def run(target: str, service: str = "http-form", userlist: str = "", passlist: s
             logger.info("Running hydra: %s %s", hostname, service)
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
 
-            os.unlink(user_file)
-            os.unlink(pass_file)
-
             output = result.stdout + result.stderr
-            found = re.findall(r"\[(\d+)\]\[(\w+)\]\s+host:\s+(\S+)\s+login:\s+(\S+)\s+password:\s+(\S*)", output)
+            found = re.findall(
+                r"\[(\d+)\]\[(\w+)\]\s+host:\s+(\S+)\s+login:\s+(\S+)\s+password:\s+(\S*)",
+                output,
+            )
 
             findings = []
             for port_n, svc, h, login, passwd in found:
                 findings.append(f"[CRITICAL] {svc}://{login}:{passwd}@{h}:{port_n}")
 
             if findings:
-                return f"Hydra — {len(findings)} credentials found:\n" + "\n".join(f"  {f}" for f in findings)
+                return (
+                    f"Hydra — {len(findings)} credentials found:\n"
+                    + "\n".join(f"  {f}" for f in findings)
+                )
             return f"Hydra — 0 credentials found ({len(usernames)}x{len(passwords)} tested)"
 
         except FileNotFoundError:
             logger.info("Hydra not found — using Python fallback for HTTP")
         except Exception as e:
             logger.error("Hydra error: %s", e)
+        finally:
+            # Always clean up temp files, even on error or timeout
+            for fpath in (user_file, pass_file):
+                if fpath:
+                    try:
+                        os.unlink(fpath)
+                    except OSError:
+                        logger.warning("Could not delete temp file: %s", fpath)
 
     # Python HTTP fallback
     params = {}

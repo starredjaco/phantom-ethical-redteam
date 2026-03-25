@@ -32,6 +32,7 @@ class AgentClient:
         self.mapping = get_tool_mapping()
         self.max_parallel = config.get("max_parallel_tools", 4)
         self.compact_after = config.get("context_compact_after", 5)
+        self.compact_max_chars = config.get("compact_max_chars", 400)
         # Stall detection
         self._stall_count = 0
         self._stall_threshold = config.get("stall_threshold", 5)
@@ -57,8 +58,8 @@ class AgentClient:
                 for block in msg["content"]:
                     if block.get("type") == "tool_result":
                         content = str(block.get("content", ""))
-                        if len(content) > 400:
-                            block = {**block, "content": content[:400] + " [...compacted]"}
+                        if len(content) > self.compact_max_chars:
+                            block = {**block, "content": content[:self.compact_max_chars] + " [...compacted]"}
                     compacted.append(block)
                 result.append({**msg, "content": compacted})
             else:
@@ -146,6 +147,7 @@ class AgentClient:
         self._turn_count += 1
         # Proactive context compaction based on estimated size
         estimated_tokens = self._estimate_tokens(messages) + len(system_prompt) // 4
+        logger.info("Turn %d — estimated context size: ~%d tokens", self._turn_count, estimated_tokens)
         if estimated_tokens > 50000:
             logger.info("Context large (~%dk tokens), aggressive compaction", estimated_tokens // 1000)
             messages = self._compact_old_tool_results(messages, keep_last_n=2)

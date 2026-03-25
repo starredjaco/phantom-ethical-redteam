@@ -19,9 +19,27 @@ def init_session() -> str:
 
 
 def log_path(filename: str) -> str:
-    """Return a session-scoped path under logs/<session>/<filename>."""
+    """Return a session-scoped path under logs/<session>/<filename>.
+
+    Validates that the resolved path stays within the session directory
+    to prevent path traversal via filenames containing '../'.
+    """
     session_dir = os.environ.get("PHANTOM_SESSION_DIR", "logs")
+    # Resolve to absolute paths to catch traversal attempts
+    abs_session = os.path.abspath(session_dir)
     path = os.path.join(session_dir, filename)
+    abs_path = os.path.abspath(path)
+
+    if not abs_path.startswith(abs_session + os.sep) and abs_path != abs_session:
+        # Path traversal attempt — fall back to a safe filename
+        logger.warning(
+            "Path traversal blocked: '%s' resolves outside session dir '%s'",
+            filename, session_dir,
+        )
+        # Replace dangerous characters and use just the basename
+        safe_name = os.path.basename(filename).replace("..", "_")
+        path = os.path.join(session_dir, safe_name)
+
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)

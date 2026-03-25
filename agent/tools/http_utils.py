@@ -32,10 +32,13 @@ def retry_request(
     except ImportError:
         pass
 
+    # Default verify=False for pentesting (self-signed certs are common)
+    verify = kwargs.pop("verify", False)
+
     last_exc = None
     for attempt in range(max_retries + 1):
         try:
-            resp = requests.request(method, url, timeout=timeout, **kwargs)
+            resp = requests.request(method, url, timeout=timeout, verify=verify, **kwargs)
             resp.raise_for_status()
             return resp
         except (requests.RequestException, Exception) as exc:

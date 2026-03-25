@@ -21,9 +21,26 @@ def _fetch_hackertarget(domain: str) -> set:
     return subs
 
 
+def _fetch_securitytrails_free(domain: str) -> set:
+    """DNS recon via SecurityTrails public/guest API (no auth, rate-limited)."""
+    try:
+        r = retry_request(
+            f"https://api.securitytrails.com/v1/domain/{domain}/subdomains?apikey=guest",
+            timeout=15,
+        )
+        data = r.json()
+        subs = set()
+        for sub in data.get("subdomains", []):
+            subs.add(f"{sub}.{domain}".lower())
+        return subs
+    except Exception:
+        return set()
+
+
 _SOURCES = {
     "crt.sh": _fetch_crtsh,
     "hackertarget": _fetch_hackertarget,
+    "securitytrails": _fetch_securitytrails_free,
 }
 
 
@@ -58,7 +75,7 @@ def run(domain: str) -> str:
 
 TOOL_SPEC = {
     "name": "run_recon",
-    "description": "Passive subdomain reconnaissance \u2014 crt.sh + HackerTarget (multi-source, deduped, with retry)",
+    "description": "Passive subdomain reconnaissance \u2014 crt.sh + HackerTarget + SecurityTrails (multi-source, deduped, with retry)",
     "input_schema": {
         "type": "object",
         "properties": {"domain": {"type": "string"}},

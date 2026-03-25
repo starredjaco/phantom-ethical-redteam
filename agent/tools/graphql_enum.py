@@ -190,7 +190,10 @@ def run(target: str, endpoint: str = "", depth: str = "full") -> str:
     except Exception:
         pass
 
-    return f"GraphQL scan — {len(findings)} findings:\n" + "\n".join(f"  {f}" for f in findings)
+    result = f"GraphQL scan — {len(findings)} findings:\n" + "\n".join(f"  {f}" for f in findings)
+    if len(result) > 5000:
+        result = result[:5000] + "\n... (use read_log 'graphql_schema.json' to see full schema)"
+    return result
 
 
 TOOL_SPEC = {

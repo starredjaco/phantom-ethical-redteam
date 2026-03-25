@@ -17,6 +17,11 @@ SCAN_TYPES = {
     "vuln": ["--script", "vuln"],
 }
 
+# Target: IP addresses, hostnames, CIDRs — no shell metacharacters or nmap flags
+_TARGET_RE = re.compile(r"^[A-Za-z0-9._:\-/]+$")
+# Ports: digits, commas, hyphens only (e.g. "80,443", "1-1000")
+_PORTS_RE = re.compile(r"^[0-9,\-]+$")
+
 
 def run(target: str, ports: str = "-", scan_type: str = "service", timeout: int = 300) -> str:
     guard = scope_guard(target)
@@ -25,6 +30,22 @@ def run(target: str, ports: str = "-", scan_type: str = "service", timeout: int 
 
     if scan_type not in SCAN_TYPES:
         return f"Unknown scan_type '{scan_type}'. Available: {', '.join(SCAN_TYPES)}"
+
+    # Validate target to prevent argument injection (e.g. "--script=malicious")
+    if not _TARGET_RE.match(target):
+        return (
+            f"Invalid target '{target}'. Target must be an IP, hostname, or CIDR. "
+            "No flags, spaces, or special characters allowed."
+        )
+    if target.startswith("-"):
+        return f"Invalid target '{target}'. Target must not start with a dash."
+
+    # Validate ports to prevent argument injection
+    if ports != "-" and not _PORTS_RE.match(ports):
+        return (
+            f"Invalid ports '{ports}'. Ports must be digits, commas, and hyphens only "
+            "(e.g. '80,443' or '1-1000')."
+        )
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = log_path(f"nmap_{ts}.txt")

@@ -3,12 +3,8 @@ import os
 import sys
 import yaml
 import json
-import time
 import logging
 import argparse
-import subprocess
-import webbrowser
-import socket
 from pathlib import Path
 
 VERSION = "2.7.1"
@@ -32,46 +28,10 @@ ROOT = Path(__file__).parent.parent
 parser = argparse.ArgumentParser(description="Phantom Ethical Red Team Agent")
 parser.add_argument("--resume", type=str, default="",
                     help="Resume a previous session (session directory name, e.g. 20260318_120000)")
-parser.add_argument("--no-dashboard", action="store_true",
-                    help="Do not launch the web dashboard automatically")
 args = parser.parse_args()
 
 # --- Change to project root ---
 os.chdir(ROOT)
-
-
-# --- Web dashboard auto-launch ---
-def _port_in_use(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(("127.0.0.1", port)) == 0
-
-
-_dashboard_proc = None
-
-if not args.no_dashboard:
-    DASHBOARD_PORT = 5000
-    if _port_in_use(DASHBOARD_PORT):
-        print(f"  Dashboard already running on http://localhost:{DASHBOARD_PORT}")
-    else:
-        try:
-            web_app = ROOT / "web" / "app.py"
-            _dashboard_proc = subprocess.Popen(
-                [sys.executable, str(web_app)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                cwd=str(ROOT),
-            )
-            # Give Flask a moment to start
-            time.sleep(1.5)
-            print(f"  Dashboard started on http://localhost:{DASHBOARD_PORT}")
-        except Exception as e:
-            print(f"  Dashboard launch failed: {e}")
-
-    # Open browser
-    try:
-        webbrowser.open(f"http://localhost:{DASHBOARD_PORT}")
-    except Exception:
-        pass
 
 
 # --- Session setup ---
@@ -284,7 +244,3 @@ while turn < max_turns:
         break
 
 print(f"\nPhantom stopped. Session logs: {session_dir}")
-
-# Cleanup dashboard subprocess
-if _dashboard_proc and _dashboard_proc.poll() is None:
-    print("  Dashboard still running at http://localhost:5000 (close manually or Ctrl+C)")

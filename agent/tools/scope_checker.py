@@ -81,30 +81,65 @@ def _ip_in_cidr(ip_str: str, cidr_str: str) -> bool:
         return False
 
 
+def _extract_hostname(target: str) -> str | None:
+    """Safely extract hostname from a target string, rejecting ambiguous inputs.
+
+    Returns the normalized hostname/IP, or None if the input is malformed or
+    contains userinfo (user@host) which could cause scope check vs actual request
+    mismatch.
+    """
+    t = target.strip()
+
+    if t.startswith(("http://", "https://")):
+        parsed = urlparse(t)
+        # Reject URLs with userinfo — these cause scope check mismatch:
+        # http://in-scope.com@evil.com actually requests evil.com
+        if "@" in (parsed.netloc or ""):
+            return None
+        hostname = parsed.hostname  # urlparse.hostname strips port and lowercases
+        if not hostname:
+            return None
+        return hostname
+
+    # Non-URL target: IP, hostname, or CIDR
+    # Strip port if present, reject anything with @ or other URL-like components
+    if "@" in t:
+        return None
+    # Remove port
+    host = t.lower().split(":")[0].split("/")[0]
+    return host if host else None
+
+
 def is_in_scope(target: str, scope_file: str = "scopes/current_scope.md") -> bool:
     """Return True if target is within the authorized scope."""
     scope_targets = load_scope_targets(scope_file)
     if not scope_targets:
-        return True  # No parseable scope — handled by main.py
+        # SECURITY: Default deny when no scope is configured.
+        # An empty or missing scope file means NO targets are authorized.
+        logger.warning("No scope targets loaded — denying by default")
+        return False
 
-    # Normalize target
-    t = target.lower().strip()
-    if t.startswith("http"):
-        t = urlparse(t).netloc or t
-    t = t.split(":")[0].split("/")[0]
+    t = _extract_hostname(target)
+    if not t:
+        # Could not parse a clean hostname — reject to prevent bypass
+        logger.warning("Could not extract clean hostname from target: %s", target)
+        return False
 
     for s in scope_targets:
-        s_clean = s.split(":")[0]
+        s_clean = s.split(":")[0].lower()
 
         # Exact match
         if t == s_clean:
             return True
 
-        # Subdomain match
+        # Subdomain match: target is a subdomain of a scope entry
+        # e.g., target=sub.example.com matches scope=example.com
         if t.endswith("." + s_clean):
             return True
-        if s_clean.endswith("." + t):
-            return True
+
+        # NOTE: The reverse check (s_clean.endswith("." + t)) was removed.
+        # It allowed overly broad matching: target="com" would match scope "example.com".
+        # Scope entries should be specific; if a subdomain is in scope, list it explicitly.
 
         # CIDR match
         if "/" in s:

@@ -19,12 +19,10 @@ Uses Nmap, Nuclei, sqlmap, ffuf, WhatWeb, advanced reconnaissance, screenshots, 
 - **Stealth profiles** — 4 modes (silent/stealthy/normal/aggressive) with User-Agent rotation, timing randomization, proxy support
 - **Parallel tool execution** — multiple tools run concurrently
 - **Mission resume** — interrupted missions can be resumed from saved state (atomic state save)
-- **Web dashboard v4** — live charts, severity filters, CSV export, keyboard shortcuts, WCAG-compliant accessibility, responsive (port 5000)
-- **Dashboard authentication** — optional API key via `PHANTOM_DASHBOARD_KEY` env var, timing-safe comparison, CSRF protection
 - **Multi-target scope** with CIDR support and strict enforcement
 - **Retry + timeout** — all LLM providers have 120s timeout and 3 retries with exponential backoff
 - **Secret redaction** — API keys, tokens, passwords automatically stripped from logs
-- **Security hardened API** — HTTP security headers (CSP, X-Frame-Options), thread-safe rate limiter per IP, extended path-traversal protection
+- **Security hardened** — thread-safe rate limiter per IP, extended path-traversal protection
 - Full structured logging (console + file) + automatic cleanup
 - Pause every N turns — human can stop, continue, or force a report
 - **Mission diff** — compare findings between sessions (new/resolved/persistent)
@@ -187,9 +185,6 @@ export $(cat .env)
 python3 agent/main.py
 ```
 
-The web dashboard opens automatically in your browser at `http://localhost:5000`.
-Use `--no-dashboard` to disable auto-launch.
-
 ### Resume an interrupted mission
 
 ```bash
@@ -197,46 +192,6 @@ python3 agent/main.py --resume 20260318_120000
 ```
 
 Phantom reloads the saved state (messages, turn count) from `logs/<session>/state.json` and continues where it left off.
-
-### Web Dashboard (v4)
-
-```bash
-cd Phantom/web
-python app.py
-```
-
-Open `http://localhost:5000` — full monitoring dashboard with 4 tabs:
-
-| Tab | Content |
-|---|---|
-| **Terminal** | Live color-coded output with turn separators, tool timeline bar |
-| **Charts** | Findings by severity (donut), open ports (bar), tools usage (pie), HTTP status codes from ffuf (bar) — all powered by Chart.js, updated in real time |
-| **Tables** | Structured findings with severity badges, severity filter buttons, nmap ports, ffuf paths with HTTP status colors |
-| **Mission Summary** | Auto-displayed on mission complete — stat cards (critical/high/medium/tools/turns/duration), summary charts, and agent narrative |
-
-**v4 improvements:**
-- **Security hardening** — CSRF protection (Origin validation), timing-safe API key comparison (`hmac.compare_digest`), thread-safe mission control with locking, sandboxed report rendering
-- **WebSocket authentication** — API key transmitted via Socket.IO connection params, scoped emit per client
-- **CDN resilience** — graceful fallback if Chart.js or Socket.IO CDN is unavailable, `crossorigin="anonymous"` on all external scripts
-- **Empty states** — informative placeholders on tables, charts, timeline, and session list when no data is available
-- **Loading states** — spinner on session list fetch, proper error recovery on failed loads
-- **WCAG accessibility** — contrast ratios fixed to AA compliance, proper ARIA tab pattern (`aria-controls`, `aria-labelledby`), reduced `aria-live` flooding
-- **Reconnection handling** — visual "Reconnecting..." status badge, toast on reconnect
-- **XSS hardening** — `escapeHtml()` now escapes quotes for attribute contexts, `report.html` uses Jinja2 `tojson` filter
-- **Memory management** — summary charts destroyed before recreation, tool timeline array pruned, rate limiter cleans stale IPs
-- **Error handling** — `startMission()` and `stopMission()` now surface HTTP errors properly, mission thread errors no longer leak exception types
-- **UI polish** — zebra-striped tables, filter button hover states, terminal line fade-in animation, improved visual hierarchy
-- Severity filter on findings table (All / Critical / High / Medium / Low)
-- CSV export for findings and ports (Excel-compatible with BOM)
-- Mission progress bar with live status
-- Toast notifications (success / error / warning / info)
-- Keyboard shortcuts: `R` = refresh, `C` = clear terminal, `F` = focus search
-- Responsive layout — 4 breakpoints (1400 / 1200 / 900 / 600px)
-- `/api/health` endpoint — status, version, mission state
-- `/api/sessions` pagination — `?page=1&limit=20`
-- Historical session replay banner with return-to-live link
-
-Click any past session in the sidebar to replay all charts and tables from `state.json`.
 
 ### Compare missions (remediation tracking)
 
@@ -442,10 +397,6 @@ Phantom/
 │   │   └── ...                 # + bettercap, payloads, etc.
 │   └── utils/
 │       └── validation.py       # Input sanitization + validation
-├── web/                        # Web dashboard (Flask + SocketIO)
-│   ├── app.py
-│   ├── templates/
-│   └── static/
 ├── tests/                      # 52 unit tests
 ├── config.yaml.example          # Template (copied to config.yaml by installer)
 ├── prompts/system_prompt.txt

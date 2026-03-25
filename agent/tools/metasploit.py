@@ -40,14 +40,83 @@ def _is_module_blocked(module: str) -> str | None:
     return None
 
 
+def _sanitize_msf_value(value: str) -> str:
+    """Sanitize a value for safe inclusion in an msfconsole -x command string.
+
+    msfconsole's -x flag interprets semicolons and newlines as command separators.
+    Double quotes can break out of quoting contexts. Backticks and $() can trigger
+    shell expansion in some msfconsole resource script contexts.
+
+    This strips all characters that could act as command separators or injection vectors.
+    """
+    dangerous_chars = set(';"\'\n\r`$(){}[]|&<>\\')
+    return "".join(c for c in str(value) if c not in dangerous_chars)
+
+
+# Strict patterns: module paths must be alphanumeric with slashes, underscores, hyphens
+_MODULE_PATH_RE = re.compile(r"^[a-zA-Z0-9/_-]+$")
+# MSF option keys: alphanumeric with underscores only
+_OPTION_KEY_RE = re.compile(r"^[A-Za-z0-9_]+$")
+# MSF option values: printable ASCII minus dangerous injection characters
+_OPTION_VALUE_RE = re.compile(r"^[A-Za-z0-9._:/@\-=,+ ]+$")
+# Target: IP, hostname, or CIDR — no shell metacharacters
+_TARGET_RE = re.compile(r"^[A-Za-z0-9._:\-/]+$")
+
+
+def _validate_module_path(module: str) -> str | None:
+    """Return error string if module path contains suspicious characters."""
+    if not _MODULE_PATH_RE.match(module):
+        return (
+            f"BLOCKED: Module path '{module}' contains invalid characters. "
+            "Only alphanumeric, '/', '_', '-' allowed."
+        )
+    return None
+
+
+def _validate_target(target: str) -> str | None:
+    """Return error string if target contains injection characters."""
+    if not _TARGET_RE.match(target):
+        return f"BLOCKED: Target '{target}' contains invalid characters."
+    return None
+
+
+def _validate_option_key(key: str) -> str | None:
+    """Return error string if option key contains non-alphanumeric characters."""
+    if not _OPTION_KEY_RE.match(key):
+        return (
+            f"BLOCKED: Option key '{key}' contains invalid characters. "
+            "Only alphanumeric and underscore allowed."
+        )
+    return None
+
+
+def _validate_option_value(value: str) -> str | None:
+    """Return error string if option value contains injection characters."""
+    if not _OPTION_VALUE_RE.match(str(value)):
+        return f"BLOCKED: Option value '{value}' contains invalid characters."
+    return None
+
+
 def _build_search_command(search_term: str) -> str:
     """Build msfconsole command string for module search."""
-    safe_term = search_term.replace('"', '\\"').replace(";", "")
-    return f'search {safe_term}; exit'
+    safe_term = _sanitize_msf_value(search_term)
+    return f"search {safe_term}; exit"
 
 
-def _build_exploit_command(module: str, target: str, options: dict) -> str:
-    """Build msfconsole command string for exploit execution."""
+def _build_exploit_command(
+    module: str, target: str, options: dict
+) -> tuple[str | None, str]:
+    """Build msfconsole command string for exploit execution.
+
+    Returns (error, command_string). error is None on success.
+    """
+    err = _validate_module_path(module)
+    if err:
+        return err, ""
+    err = _validate_target(target)
+    if err:
+        return err, ""
+
     cmds = [f"use {module}"]
     cmds.append(f"set RHOSTS {target}")
 
@@ -58,32 +127,56 @@ def _build_exploit_command(module: str, target: str, options: dict) -> str:
             payload = DEFAULT_PAYLOADS["unix"]
         else:
             payload = DEFAULT_PAYLOADS["generic"]
+
+    err = _validate_module_path(payload)
+    if err:
+        return f"BLOCKED: Payload path invalid — {err}", ""
     cmds.append(f"set PAYLOAD {payload}")
 
-    # Apply all remaining options
+    # Apply all remaining options with strict validation
     for key, value in options.items():
-        safe_key = str(key).replace(";", "")
-        safe_val = str(value).replace(";", "")
-        cmds.append(f"set {safe_key} {safe_val}")
+        err = _validate_option_key(key)
+        if err:
+            return err, ""
+        err = _validate_option_value(value)
+        if err:
+            return err, ""
+        cmds.append(f"set {key} {value}")
 
     cmds.append("run")
     cmds.append("exit")
-    return "; ".join(cmds)
+    return None, "; ".join(cmds)
 
 
-def _build_auxiliary_command(module: str, target: str, options: dict) -> str:
-    """Build msfconsole command string for auxiliary module execution."""
+def _build_auxiliary_command(
+    module: str, target: str, options: dict
+) -> tuple[str | None, str]:
+    """Build msfconsole command string for auxiliary module execution.
+
+    Returns (error, command_string). error is None on success.
+    """
+    err = _validate_module_path(module)
+    if err:
+        return err, ""
+    err = _validate_target(target)
+    if err:
+        return err, ""
+
     cmds = [f"use {module}"]
     cmds.append(f"set RHOSTS {target}")
 
     for key, value in options.items():
-        safe_key = str(key).replace(";", "")
-        safe_val = str(value).replace(";", "")
-        cmds.append(f"set {safe_key} {safe_val}")
+        err = _validate_option_key(key)
+        if err:
+            return err, ""
+        err = _validate_option_value(value)
+        if err:
+            return err, ""
+        cmds.append(f"set {key} {value}")
 
     cmds.append("run")
     cmds.append("exit")
-    return "; ".join(cmds)
+    return None, "; ".join(cmds)
 
 
 def _parse_search_results(output: str) -> str:
@@ -197,7 +290,9 @@ def run(
                 "Provide it in options: {\"LHOST\": \"<your-ip>\"}. "
                 "Auto-detection is disabled for safety."
             )
-        msf_cmd = _build_exploit_command(module, target, dict(options))
+        err, msf_cmd = _build_exploit_command(module, target, dict(options))
+        if err:
+            return err
 
     # ------------------------------------------------------------------
     # Action: auxiliary
@@ -210,7 +305,9 @@ def run(
                 f"Module '{module}' does not look like an auxiliary module. "
                 "Expected path starting with 'auxiliary/' (e.g., auxiliary/scanner/http/http_version)."
             )
-        msf_cmd = _build_auxiliary_command(module, target, dict(options))
+        err, msf_cmd = _build_auxiliary_command(module, target, dict(options))
+        if err:
+            return err
 
     # ------------------------------------------------------------------
     # Execute msfconsole
@@ -243,14 +340,17 @@ def run(
         # Parse and return summary
         if action == "search":
             summary = _parse_search_results(output)
-            return f"Metasploit search for '{search_term}':\n{summary}"
+            result_text = f"Metasploit search for '{search_term}':\n{summary}"
         else:
             summary = _parse_exploit_results(output)
-            return (
+            result_text = (
                 f"Metasploit {action} — {module} vs {target}:\n"
                 f"{summary}\n\n"
                 f"Full output logged to: {output_file}"
             )
+        if len(result_text) > 5000:
+            result_text = result_text[:5000] + f"\n... (use read_log to see full output)"
+        return result_text
 
     except subprocess.TimeoutExpired:
         return (

@@ -77,6 +77,7 @@ class OllamaProvider(BaseLLMProvider):
             model=self.model,
             messages=self._to_provider_messages(messages, system_prompt),
             tools=tools,
+            keep_alive="10m",
         )
 
         msg = response.message

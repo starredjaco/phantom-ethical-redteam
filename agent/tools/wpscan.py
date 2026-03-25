@@ -109,7 +109,10 @@ def _python_wpscan(target: str) -> str:
         header += f" (version {wp_version})"
     if users:
         header += f" | Users: {', '.join(users)}"
-    return header + "\n" + "\n".join(f"  {f}" for f in findings)
+    result = header + "\n" + "\n".join(f"  {f}" for f in findings)
+    if len(result) > 5000:
+        result = result[:5000] + "\n... (use read_log to see full output)"
+    return result
 
 
 def run(target: str, api_token: str = "") -> str:
@@ -154,7 +157,10 @@ def run(target: str, api_token: str = "") -> str:
                     findings.append(f"[MEDIUM] Enumerated users: {users}")
 
                 if findings:
-                    return f"WPScan — {len(findings)} findings:\n" + "\n".join(f"  {f}" for f in findings)
+                    cli_result = f"WPScan — {len(findings)} findings:\n" + "\n".join(f"  {f}" for f in findings)
+                    if len(cli_result) > 5000:
+                        cli_result = cli_result[:5000] + "\n... (use read_log 'wpscan.json' to see full output)"
+                    return cli_result
                 return "WPScan done — 0 findings"
 
         # wpscan ran but no output
