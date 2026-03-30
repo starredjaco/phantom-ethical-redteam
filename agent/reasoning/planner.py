@@ -119,9 +119,7 @@ class PlanningLayer:
         if self.state.findings:
             lines.append(f"Findings: {len(self.state.findings)} total")
             for f in self.state.findings[-5:]:
-                lines.append(
-                    f"  [{f.get('severity', '?')}] {f.get('title', '')[:80]}"
-                )
+                lines.append(f"  [{f.get('severity', '?')}] {f.get('title', '')[:80]}")
 
         # Target model (compact JSON)
         if self.state.target_model:
@@ -132,6 +130,10 @@ class PlanningLayer:
     # ------------------------------------------------------------------
     # Plan / hypothesis parsing from LLM text
     # ------------------------------------------------------------------
+
+    # Regex that strips markdown code fences around XML blocks produced by
+    # some models (e.g. deepseek wraps structured output in ```xml ... ```).
+    _RE_CODE_FENCE = re.compile(r"```(?:xml|json)?\s*(.*?)\s*```", re.DOTALL)
 
     def parse_plan_actions(self, llm_text: str) -> str:
         """Parse structured plan commands from LLM output.
@@ -146,10 +148,15 @@ class PlanningLayer:
         State is mutated in-place.  Returns the *cleaned* text with all
         plan/hypothesis XML blocks removed.
         """
-        self._parse_plan_create(llm_text)
-        self._parse_plan_update(llm_text)
-        self._parse_plan_abandon(llm_text)
-        self._parse_hypothesis_update(llm_text)
+        # Some models (e.g. deepseek) wrap structured XML in markdown code
+        # fences.  Expand fences by replacing them with their inner content
+        # so the plan regexes see the XML regardless of wrapping.
+        parse_target = self._RE_CODE_FENCE.sub(r"\1", llm_text)
+
+        self._parse_plan_create(parse_target)
+        self._parse_plan_update(parse_target)
+        self._parse_plan_abandon(parse_target)
+        self._parse_hypothesis_update(parse_target)
 
         cleaned = self._strip_plan_blocks(llm_text)
         return cleaned
@@ -357,13 +364,20 @@ class PlanningLayer:
 
 
 def _parse_attrs(attr_string: str) -> dict[str, str]:
-    """Parse XML-like ``key="value"`` attributes from a string.
+    """Parse XML-like ``key="value"`` or ``key='value'`` attributes from a string.
 
     Handles the subset of XML attributes used by Phantom plan blocks.
-    Does NOT handle escaped quotes inside values -- plan blocks should
-    avoid them.
+    Supports both double-quoted and single-quoted values so models that
+    emit single quotes (e.g. for args='...' in action blocks) are handled.
+    Does NOT handle escaped quotes inside values.
     """
-    return dict(re.findall(r'(\w+)="([^"]*)"', attr_string))
+    result: dict[str, str] = {}
+    # Match key="value" or key='value' — single quotes take priority when both present
+    for m in re.finditer(r"""(\w+)=(?:"([^"]*)"|'([^']*)')""", attr_string):
+        key = m.group(1)
+        value = m.group(2) if m.group(2) is not None else m.group(3)
+        result[key] = value
+    return result
 
 
 def _safe_json(s: str) -> dict:

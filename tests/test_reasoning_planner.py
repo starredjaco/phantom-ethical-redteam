@@ -26,8 +26,14 @@ def test_serialize_state_with_hypotheses():
     state = AttackState(
         turn=5,
         hypotheses=[
-            Hypothesis(id="h1", statement="Apache outdated", confidence=HypothesisConfidence.PROBABLE),
-            Hypothesis(id="h2", statement="Not vuln", confidence=HypothesisConfidence.DISPROVED),
+            Hypothesis(
+                id="h1",
+                statement="Apache outdated",
+                confidence=HypothesisConfidence.PROBABLE,
+            ),
+            Hypothesis(
+                id="h2", statement="Not vuln", confidence=HypothesisConfidence.DISPROVED
+            ),
         ],
     )
     layer = PlanningLayer(state=state)
@@ -69,12 +75,12 @@ def test_serialize_state_with_target_model():
 
 
 def test_parse_plan_create():
-    text = '''
+    text = """
     <plan_create objective="Scan web services" priority="0.8">
       <action description="Run nmap" tool="nmap" priority="0.9" />
       <action description="Run nuclei" tool="nuclei" depends_on="prev" priority="0.7" />
     </plan_create>
-    '''
+    """
     layer = PlanningLayer()
     cleaned = layer.parse_plan_actions(text)
 
@@ -103,14 +109,14 @@ def test_parse_plan_create_no_actions():
 
 
 def test_parse_multiple_plans():
-    text = '''
+    text = """
     <plan_create objective="Plan A" priority="0.9">
       <action description="A1" tool="nmap" />
     </plan_create>
     <plan_create objective="Plan B" priority="0.3">
       <action description="B1" tool="ffuf" />
     </plan_create>
-    '''
+    """
     layer = PlanningLayer()
     layer.parse_plan_actions(text)
     assert len(layer.state.plans) == 2
@@ -130,11 +136,11 @@ def test_parse_plan_update():
     plan = AttackPlan(id="p1", objective="test", actions=[action])
     layer.state.plans.append(plan)
 
-    text = '''
+    text = """
     <plan_update id="p1">
       <action_status id="act1" status="done" summary="Found 3 ports" />
     </plan_update>
-    '''
+    """
     layer.parse_plan_actions(text)
 
     assert layer.state.plans[0].actions[0].status == "done"
@@ -233,8 +239,60 @@ def test_parse_attrs():
     assert result == {"id": "p1", "objective": "Scan", "priority": "0.8"}
 
 
+def test_parse_attrs_single_quotes():
+    """Single-quoted attributes should parse correctly (e.g. deepseek emits args='...')."""
+    result = _parse_attrs('tool="nmap" args=\'{"target": "10.0.0.1"}\'')
+    assert result["tool"] == "nmap"
+    assert '"target"' in result["args"]
+
+
+def test_parse_attrs_mixed_quotes():
+    """Mixed single/double quoted attributes on the same element should all parse."""
+    result = _parse_attrs('objective="Scan" args=\'{"x":1}\' priority="0.8"')
+    assert result["objective"] == "Scan"
+    assert result["priority"] == "0.8"
+    assert result["args"] == '{"x":1}'
+
+
 def test_parse_attrs_empty():
     assert _parse_attrs("") == {}
+
+
+# ---------------------------------------------------------------------------
+# Markdown code-fence stripping
+# ---------------------------------------------------------------------------
+
+
+def test_parse_plan_create_inside_code_fence():
+    """Plan blocks wrapped in ```xml fences (deepseek style) should still be parsed."""
+    text = """
+Some reasoning text.
+
+```xml
+<plan_create objective="Fenced plan" priority="0.7">
+  <action description="Scan" tool="nmap" />
+</plan_create>
+```
+
+More text.
+"""
+    layer = PlanningLayer()
+    layer.parse_plan_actions(text)
+    assert len(layer.state.plans) == 1
+    assert layer.state.plans[0].objective == "Fenced plan"
+
+
+def test_parse_plan_create_single_quoted_args():
+    """Action args in single quotes (as shown in system prompt example) should parse."""
+    text = """<plan_create objective="Test" priority="0.5">
+  <action tool="nmap" args='{"target": "10.0.0.1"}' description="portscan"/>
+</plan_create>"""
+    layer = PlanningLayer()
+    layer.parse_plan_actions(text)
+    assert len(layer.state.plans) == 1
+    action = layer.state.plans[0].actions[0]
+    assert action.tool_name == "nmap"
+    assert action.tool_args == {"target": "10.0.0.1"}
 
 
 def test_safe_json_valid():

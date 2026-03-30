@@ -216,10 +216,12 @@ def _check_cookies(headers) -> list[dict]:
         if "samesite" not in cookie_lower:
             missing_flags.append("SameSite")
         if missing_flags:
-            findings.append({
-                "cookie": name,
-                "missing": missing_flags,
-            })
+            findings.append(
+                {
+                    "cookie": name,
+                    "missing": missing_flags,
+                }
+            )
     return findings
 
 
@@ -270,7 +272,9 @@ def _detect_technologies(headers, body: str) -> list[str]:
             if substring == "" or substring.lower() in header_val.lower():
                 if label not in detected:
                     detected.add(label)
-                    results.append(f"[INFO] {label} (header: {header_name}: {header_val})")
+                    results.append(
+                        f"[INFO] {label} (header: {header_name}: {header_val})"
+                    )
 
     # X-Powered-By raw value (always log it)
     xpb = headers.get("X-Powered-By", "")
@@ -304,7 +308,10 @@ def _detect_technologies(headers, body: str) -> list[str]:
 
     # Rails combo heuristic
     if "authenticity_token" in body and headers.get("X-Runtime"):
-        if "Ruby on Rails" not in detected and "Ruby on Rails (probable)" not in detected:
+        if (
+            "Ruby on Rails" not in detected
+            and "Ruby on Rails (probable)" not in detected
+        ):
             results.append("[INFO] Ruby on Rails detected (body + X-Runtime header)")
 
     return results
@@ -407,6 +414,13 @@ def _fallback_fingerprint(target: str) -> str:
     if not target.startswith("http"):
         target = f"https://{target}"
 
+    # Normalize to root URL (scheme + host only) so sensitive-file probes and
+    # robots/sitemap checks always hit the root, even when called with a sub-path.
+    from urllib.parse import urlparse as _urlparse
+
+    _parsed = _urlparse(target)
+    root_target = f"{_parsed.scheme}://{_parsed.netloc}"
+
     # ---- Sections (populated below) ----
     sec_server: list[str] = []
     sec_tech: list[str] = []
@@ -443,22 +457,24 @@ def _fallback_fingerprint(target: str) -> str:
         sec_server.append(f"[INFO] Main page fetch error: {e}")
 
     # ===================== Discovery probes =====================
-    sec_discovery = _check_robots_sitemap(target)
+    sec_discovery = _check_robots_sitemap(root_target)
 
     # ===================== Sensitive file probes =====================
-    sec_files = _probe_sensitive_files(target)
+    sec_files = _probe_sensitive_files(root_target)
 
     # ===================== Build formatted output =====================
     sections = []
 
     if sec_server:
         sections.append(
-            "=== Server & Infrastructure ===\n" + "\n".join(f"  {r}" for r in sec_server)
+            "=== Server & Infrastructure ===\n"
+            + "\n".join(f"  {r}" for r in sec_server)
         )
 
     if sec_tech:
         sections.append(
-            "=== Technologies & Frameworks ===\n" + "\n".join(f"  {r}" for r in sec_tech)
+            "=== Technologies & Frameworks ===\n"
+            + "\n".join(f"  {r}" for r in sec_tech)
         )
 
     header_lines = sec_headers_present + sec_headers_missing
@@ -473,9 +489,7 @@ def _fallback_fingerprint(target: str) -> str:
         )
 
     if sec_cookies:
-        sections.append(
-            "=== Cookies ===\n" + "\n".join(f"  {r}" for r in sec_cookies)
-        )
+        sections.append("=== Cookies ===\n" + "\n".join(f"  {r}" for r in sec_cookies))
 
     if sec_discovery:
         sections.append(
@@ -495,7 +509,8 @@ def _fallback_fingerprint(target: str) -> str:
         )
     else:
         logger.info(
-            "Fallback fingerprint for %s — no technologies positively identified", target
+            "Fallback fingerprint for %s — no technologies positively identified",
+            target,
         )
 
     output = "Technology fingerprint (Python fallback):\n\n" + "\n\n".join(sections)
