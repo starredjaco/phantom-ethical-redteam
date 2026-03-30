@@ -85,11 +85,14 @@ class Orchestrator:
         # Scope enforcement
         self.scope_checker = scope_checker
 
+        # ------ System prompt (load first — needed by context manager) ------
+        self._system_prompt_template = self._load_system_prompt()
+
         # ------ Reasoning components (lazy-imported to tolerate missing modules) ------
         self._planner = self._safe_import_component("PlanningLayer")
         self._reflector = self._safe_import_component("ReflectionLayer", self.reflect_interval)
         self._strategist = self._safe_import_component("Strategist")
-        self._context_manager = self._safe_import_component("ContextManager")
+        self._context_manager = self._init_context_manager()
 
         # ------ Memory ------
         self._mission_memory = self._safe_import_memory("MissionMemory")
@@ -104,6 +107,9 @@ class Orchestrator:
 
         # ------ Cognitive state ------
         self.attack_state = AttackState()
+        # findings and hypotheses tracked separately from AttackState (plans only)
+        self._findings: list[dict] = []
+        self._hypotheses: list[dict] = []
 
         # ------ Mission state machine ------
         self.mission_state = MissionState(mission_id=self.mission_id)
@@ -115,9 +121,6 @@ class Orchestrator:
 
         # ------ Conversation history for LLM ------
         self._messages: list[dict] = []
-
-        # ------ System prompt (loaded from file, with placeholder injection) ------
-        self._system_prompt_template = self._load_system_prompt()
 
         # ------ Runtime bookkeeping ------
         self._turn: int = 0
@@ -137,6 +140,19 @@ class Orchestrator:
             return cls(*args)
         except (ImportError, AttributeError) as exc:
             logger.warning("Reasoning component %s not available: %s", class_name, exc)
+            return None
+
+    def _init_context_manager(self) -> Any:
+        """Initialize ContextManager with the loaded system prompt template."""
+        try:
+            from agent.reasoning.context_manager import ContextManager
+            provider_name = self.config.get("provider", "ollama")
+            return ContextManager(
+                system_prompt_template=self._system_prompt_template,
+                provider_name=provider_name,
+            )
+        except Exception as exc:
+            logger.warning("ContextManager not available: %s", exc)
             return None
 
     @staticmethod
@@ -241,15 +257,15 @@ class Orchestrator:
         lines = [f"Turn: {self._turn}/{self.max_turns}"]
         lines.append(f"Phase: {self.mission_state.phase.value}")
 
-        findings_count = len(self.attack_state.findings)
+        findings_count = len(self._findings)
         if findings_count:
             lines.append(f"Findings: {findings_count} total")
-            for f in self.attack_state.findings[-5:]:
+            for f in self._findings[-5:]:
                 sev = f.get("severity", "?")
                 title = f.get("title", "")[:80]
                 lines.append(f"  [{sev}] {title}")
 
-        if self.attack_state.target_model:
+        if getattr(self.attack_state, "target_model", None):
             lines.append(f"Targets: {json.dumps(self.attack_state.target_model, separators=(',', ':'))}")
 
         return "\n".join(lines)
@@ -281,16 +297,14 @@ class Orchestrator:
 
     def _format_hypotheses(self) -> str:
         """Format active hypotheses for context injection."""
-        active = [
-            h for h in self.attack_state.hypotheses
-            if h.confidence != HypothesisConfidence.DISPROVED
-        ]
-        if not active:
+        if not self._hypotheses:
             return "(no active hypotheses)"
-
         lines = []
-        for h in active:
-            lines.append(f"[{h.id}] {h.confidence.value}: {h.statement}")
+        for h in self._hypotheses[-10:]:
+            hid = h.get("id", "?")
+            conf = h.get("confidence", "speculative")
+            stmt = h.get("statement", "")
+            lines.append(f"[{hid}] {conf}: {stmt}")
         return "\n".join(lines)
 
     def _format_last_plan(self) -> str:
@@ -756,7 +770,7 @@ class Orchestrator:
 
             # Add findings to attack state for context injection
             for finding in findings:
-                self.attack_state.findings.append(finding.to_dict())
+                self._findings.append(finding.to_dict())
 
             # Update timeline
             if self._timeline is not None:
@@ -960,7 +974,7 @@ class Orchestrator:
         # All hypotheses tested
         untested = [
             h
-            for h in self.attack_state.hypotheses
+            for h in self._hypotheses
             if h.confidence
             in (HypothesisConfidence.SPECULATIVE, HypothesisConfidence.PROBABLE)
         ]
@@ -1004,10 +1018,10 @@ class Orchestrator:
         debrief: dict[str, Any] = {
             "mission_id": self.mission_id,
             "total_turns": self._turn,
-            "total_findings": len(self.attack_state.findings),
+            "total_findings": len(self._findings),
             "attack_graph": self.attack_graph.to_dict(),
             "attack_graph_mermaid": self.attack_graph.to_mermaid(),
-            "findings": self.attack_state.findings,
+            "findings": self._findings,
             "plans": [p.to_dict() for p in self.attack_state.plans],
             "hypotheses": [
                 {
@@ -1015,7 +1029,7 @@ class Orchestrator:
                     "statement": h.statement,
                     "confidence": h.confidence.value,
                 }
-                for h in self.attack_state.hypotheses
+                for h in self._hypotheses
             ],
         }
 
@@ -1058,13 +1072,13 @@ class Orchestrator:
 
         self._emit_event(
             EventType.SESSION_END,
-            reasoning=f"Mission completed after {self._turn} turns, {len(self.attack_state.findings)} findings",
+            reasoning=f"Mission completed after {self._turn} turns, {len(self._findings)} findings",
         )
 
         print(f"\n{'=' * 60}")
         print(f"  MISSION DEBRIEF")
         print(f"  Turns: {self._turn}")
-        print(f"  Findings: {len(self.attack_state.findings)}")
+        print(f"  Findings: {len(self._findings)}")
         print(f"  Attack chains: {len(chains)}")
         print(f"  Plans: {len(self.attack_state.plans)} "
               f"({sum(1 for p in self.attack_state.plans if p.status == PlanStatus.COMPLETED)} completed, "
