@@ -405,11 +405,14 @@ class Orchestrator:
 
             self._turn += 1
             self.attack_state.turn = self._turn
-            logger.info("=== Turn %d/%d ===", self._turn, self.max_turns)
+            logger.debug("=== Cycle %d/%d ===", self._turn, self.max_turns)
 
             try:
                 # 1. PLAN -- inject state, get LLM response with plan + tool calls
                 text_blocks, tool_calls = self._plan_phase()
+
+                # Enforce parallel execution — nudge if LLM only returned 1 tool
+                tool_calls = self._enforce_parallel_tools(tool_calls)
 
                 # 2. ACT -- execute tool calls
                 tool_results = self._act_phase(tool_calls)
@@ -425,8 +428,8 @@ class Orchestrator:
                     self._run_strategist()
 
                 # Feed new findings back into the hypothesis engine
-                if self._hypothesis_engine is not None and self._findings:
-                    new_this_turn = self._findings[-(len(tool_calls) or 1) :]
+                if self._hypothesis_engine is not None and self._findings and tool_calls:
+                    new_this_turn = self._findings[-len(tool_calls) :]
                     for f in new_this_turn:
                         ftype = f.get("category", f.get("type", "general"))
                         title = f.get("title", "")
@@ -477,39 +480,9 @@ class Orchestrator:
         """Build the initial user message — loads prompts/initial_mission.txt if available."""
         targets_str = "\n".join(f"  - {t}" for t in scope_targets)
 
-        # Seed hypothesis engine with broad initial attack surface
+        # Seed hypothesis engine with a broad, tiered burst of high-priority hypotheses
         if self._hypothesis_engine is not None:
-            for target in scope_targets:
-                self._hypothesis_engine.add_hypothesis(
-                    f"Enumerate all open ports and services on {target}",
-                    priority=0.9,
-                    category="recon",
-                )
-                self._hypothesis_engine.add_hypothesis(
-                    f"Identify web technologies and frameworks on {target}",
-                    priority=0.85,
-                    category="recon",
-                )
-                self._hypothesis_engine.add_hypothesis(
-                    f"Discover exposed admin/config/debug endpoints on {target}",
-                    priority=0.9,
-                    category="exposure",
-                )
-                self._hypothesis_engine.add_hypothesis(
-                    f"Test for injection vulnerabilities (SQLi, SSTI, SSRF, CMDi) on {target}",
-                    priority=0.95,
-                    category="injection",
-                )
-                self._hypothesis_engine.add_hypothesis(
-                    f"Check for information disclosure (.env, .git, swagger, backup files) on {target}",
-                    priority=0.88,
-                    category="exposure",
-                )
-                self._hypothesis_engine.add_hypothesis(
-                    f"Test authentication surfaces for default credentials and bypass on {target}",
-                    priority=0.92,
-                    category="auth",
-                )
+            self._hypothesis_engine.burst_launch(scope_targets)
 
         # Try to load prompts/initial_mission.txt for richly formatted seed
         mission_prompt_path = ROOT / "prompts" / "initial_mission.txt"
@@ -532,6 +505,61 @@ class Orchestrator:
             "forge_tool is your weapon when built-in tools are insufficient — use it aggressively.\n\n"
             "Think like an attacker. Act like one. Go."
         )
+
+    # ------------------------------------------------------------------
+    # Parallel enforcement
+    # ------------------------------------------------------------------
+
+    def _enforce_parallel_tools(self, tool_calls: list[dict]) -> list[dict]:
+        """If LLM returned fewer than 2 tool calls, nudge it to run more in parallel."""
+        if len(tool_calls) >= 2:
+            return tool_calls
+
+        # Build a nudge — get top hypotheses to suggest
+        hyp_str = ""
+        if self._hypothesis_engine is not None:
+            try:
+                next_hyps = self._hypothesis_engine.get_next_hypotheses(3)
+                if next_hyps:
+                    hyp_str = "\n".join(f"- {h.statement}" for h in next_hyps)
+            except Exception:
+                pass
+
+        nudge = (
+            "You called only 1 tool. This is insufficient — you MUST call at least 3 tools "
+            "simultaneously. Launch parallel attack vectors NOW. Do not wait for results. "
+            f"Current hypotheses to pursue in parallel:\n{hyp_str}\n"
+            "Call at least 3 tools in your next response."
+        )
+
+        self._messages.append({"role": "user", "content": nudge})
+
+        # Get another LLM response
+        system_prompt = self._build_system_prompt()
+        messages = self._compact_old_tool_results(self._messages)
+        converted_tools = self.provider.convert_tools(self._tool_specs)
+
+        try:
+            _, extra_tool_calls = self.provider.call_with_retry(
+                messages, system_prompt, converted_tools
+            )
+            if extra_tool_calls:
+                # Add to conversation history
+                assistant_blocks = [
+                    {
+                        "type": "tool_use",
+                        "id": tc["id"],
+                        "name": tc["name"],
+                        "input": tc["input"],
+                    }
+                    for tc in extra_tool_calls
+                ]
+                self._messages.append({"role": "assistant", "content": assistant_blocks})
+                return tool_calls + extra_tool_calls
+        except Exception as exc:
+            logger.debug("Parallel enforcement nudge failed: %s", exc)
+
+        return tool_calls
 
     # ------------------------------------------------------------------
     # Phase 1: PLAN
@@ -573,10 +601,9 @@ class Orchestrator:
         for text in text_blocks:
             cleaned = self._parse_plan_blocks(text)
             cleaned_texts.append(cleaned)
-            # Display to operator
-            print(f"\n{'=' * 60}")
-            print(f"Phantom [Turn {self._turn}]: {cleaned}")
-            print(f"{'=' * 60}")
+            # Display to operator (only meaningful, non-empty reasoning)
+            if cleaned and len(cleaned.strip()) > 20:
+                print(f"\n[Phantom] {cleaned.strip()[:500]}")
             logger.info("Reasoning: %s", cleaned[:300])
 
         # Build assistant message for conversation history
@@ -745,7 +772,7 @@ class Orchestrator:
 
         tool_names = [tc["name"] for tc in tool_calls]
         logger.info("Executing %d tool(s): %s", len(tool_calls), tool_names)
-        print(f"  >> Running: {', '.join(tool_names)}")
+        print(f"\n  [*] Executing {len(tool_names)} tools in parallel: {', '.join(tool_names)}")
 
         results = self._execute_tools_parallel(tool_calls)
 
@@ -901,7 +928,11 @@ class Orchestrator:
 
             # Add findings to attack state for context injection
             for finding in findings:
-                self._findings.append(finding.to_dict())
+                f = finding.to_dict()
+                self._findings.append(f)
+                sev = f.get("severity", "").upper() if isinstance(f, dict) else ""
+                if sev in ("CRITICAL", "HIGH"):
+                    print(f"\n  [!] [{sev}] {f.get('title', f.get('name', 'Finding'))}")
 
             # Update timeline
             if self._timeline is not None:
@@ -1305,13 +1336,7 @@ class Orchestrator:
             logger.info("Mission complete: max turns (%d) reached", self.max_turns)
             return True
 
-        # All hypotheses tested
-        untested = [
-            h
-            for h in self._hypotheses
-            if h.confidence
-            in (HypothesisConfidence.SPECULATIVE, HypothesisConfidence.PROBABLE)
-        ]
+        # All plans resolved (hypothesis queue exhaustion is checked separately via is_exhausted())
         all_plans_done = (
             all(
                 p.status in (PlanStatus.COMPLETED, PlanStatus.ABANDONED)
@@ -1321,9 +1346,22 @@ class Orchestrator:
             else False
         )
 
-        if all_plans_done and not untested and self._turn > 5:
-            logger.info("Mission complete: all plans resolved and hypotheses tested")
-            return True
+        # self._hypotheses is populated from AttackState XML blocks only — use hypothesis
+        # engine as the authoritative queue; fall back to the XML-tracked list if engine
+        # is unavailable.
+        if self._hypothesis_engine is not None:
+            # Engine exhaustion is checked in run_mission; skip duplicate check here
+            pass
+        else:
+            untested = [
+                h
+                for h in self._hypotheses
+                if h.confidence
+                in (HypothesisConfidence.SPECULATIVE, HypothesisConfidence.PROBABLE)
+            ]
+            if all_plans_done and not untested and self._turn > 5:
+                logger.info("Mission complete: all plans resolved and hypotheses tested")
+                return True
 
         # Check if the LLM signalled completion
         if self._messages:

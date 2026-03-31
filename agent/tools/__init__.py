@@ -47,6 +47,7 @@ def _import_all_tools():
     from .payloads import run as run_payloads, TOOL_SPEC as payloads_spec
     from .human_input import run as request_human_input, TOOL_SPEC as human_input_spec
     from .report import run as generate_report, TOOL_SPEC as report_spec
+    from .exploit_fetcher import run as fetch_exploit, TOOL_SPEC as exploit_fetcher_spec
 
     _core_specs = [
         nuclei_spec,
@@ -61,6 +62,7 @@ def _import_all_tools():
         payloads_spec,
         human_input_spec,
         report_spec,
+        exploit_fetcher_spec,
     ]
     _core_funcs = {
         "run_nuclei": run_nuclei,
@@ -75,6 +77,7 @@ def _import_all_tools():
         "run_payloads": run_payloads,
         "request_human_input": request_human_input,
         "generate_report": generate_report,
+        "fetch_exploit": fetch_exploit,
     }
     TOOL_SPECS.extend(_core_specs)
     TOOL_REGISTRY.update(_core_funcs)

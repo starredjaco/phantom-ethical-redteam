@@ -117,9 +117,10 @@ class TestIsInScope:
         f = scope_file("10.0.0.0/24")
         assert is_in_scope("10.0.1.1", f) is False
 
-    def test_empty_scope_permissive(self, scope_file):
+    def test_empty_scope_denies_by_default(self, scope_file):
+        # Empty scope file = no authorized targets; deny-by-default is the safe choice
         f = scope_file("")
-        assert is_in_scope("anything.com", f) is True
+        assert is_in_scope("anything.com", f) is False
 
     def test_url_with_port(self, scope_file):
         f = scope_file("http://dummytarget.com")

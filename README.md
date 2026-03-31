@@ -267,6 +267,14 @@ Mission Diff: session_A -> session_B
 
 ## Changelog
 
+### v3.2.0
+- **Parallel execution enforced** — LLM is required to call a minimum of 3 tools per response; if it returns only 1, the orchestrator auto-nudges with the top pending hypotheses and forces a parallel batch
+- **Turn-based UX eliminated** — "Turn X" messages moved to debug log; operator sees tool execution (`[*] Executing 4 tools in parallel: ...`) and findings (`[!] [CRITICAL] ...`) only
+- **Burst launch mode** — mission start seeds 12 tiered hypotheses per target (injection, exposure, auth, CVE, admin, fuzzing, recon) via `HypothesisEngine.burst_launch()`
+- **`fetch_exploit` tool** — searches ExploitDB (searchsploit) and GitHub PoC repos for CVEs and known vulnerabilities; downloads and executes exploit scripts against authorized targets via sandbox
+- **Bug fixes** — fixed dead-code `_check_mission_complete` hypothesis path; fixed stale finding injection on text-only turns; updated 7 stale tests to match current output format
+- **253 unit tests** (up from 246)
+
 ### v3.1.0
 - **Hypothesis-driven engine** — missions are driven by a priority queue of attack hypotheses, not a turn counter. The mission ends when all attack vectors are exhausted.
 - **Auto follow-up generation** — every confirmed finding automatically spawns targeted follow-up hypotheses (injection → blind SQLi + SSTI; auth weakness → privesc; exposed port → targeted service attack)

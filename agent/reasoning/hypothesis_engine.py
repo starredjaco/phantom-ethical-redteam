@@ -512,59 +512,93 @@ class HypothesisEngine:
         self._force_stopped = True
         logger.info("HypothesisEngine: force_stop requested")
 
-    def to_prompt_summary(self, max_items: int = 5) -> str:
-        """Return a compact string of top hypotheses for injection into the system prompt.
+    def burst_launch(self, targets: list[str]) -> list:
+        """Seed a large set of diverse, high-priority hypotheses for all targets.
 
-        Shows the highest-priority pending hypotheses plus a brief status
-        line about confirmed/disproved counts.  Designed to fit within a
-        limited token budget.
+        Called at mission start to ensure the LLM immediately has rich parallel work.
+        Returns the list of seeded hypotheses.
         """
-        lines: list[str] = []
+        seeded = []
+        for target in targets:
+            hypotheses = [
+                # Tier 1 — Critical impact
+                (f"SSTI/SSRF/SQLi injection on all input surfaces of {target}", 0.98, "injection"),
+                (f"Exposed .git .env .aws config files on {target}", 0.97, "exposure"),
+                (f"Auth bypass and default credentials on {target}", 0.95, "auth"),
+                (f"CVE scan — known vulnerabilities in detected stack on {target}", 0.93, "cve"),
+                (f"Admin panel discovery and exploitation on {target}", 0.92, "auth"),
+                # Tier 2 — High impact
+                (f"Port scan and service fingerprinting on {target}", 0.88, "recon"),
+                (f"Directory and endpoint fuzzing on {target}", 0.86, "recon"),
+                (f"JWT token forgery and OAuth misconfiguration on {target}", 0.84, "auth"),
+                (f"GraphQL introspection and schema abuse on {target}", 0.80, "exposure"),
+                (f"0-day fuzzing: type confusion, boundary conditions, encoding attacks on {target}", 0.78, "injection"),
+                # Tier 3 — Reconnaissance
+                (f"Subdomain enumeration and attack surface mapping for {target}", 0.75, "recon"),
+                (f"Technology fingerprinting and version detection on {target}", 0.72, "recon"),
+            ]
+            for statement, priority, category in hypotheses:
+                h = self.add_hypothesis(statement=statement, priority=priority, category=category)
+                seeded.append(h)
+        return seeded
 
-        # Pull top pending hypotheses without dequeuing them
+    def to_prompt_summary(self, max_items: int = 5) -> str:
+        """Return an actionable hypothesis queue summary for injection into the system prompt.
+
+        Shows the highest-priority pending hypotheses with urgency labels so the
+        LLM knows exactly what to work on next.  Designed to fit within a limited
+        token budget while maximising signal density.
+        """
+        # Pull pending hypotheses without dequeuing them
         pending = [
             hyp
             for hyp in self._registry.values()
             if hyp.status == HypothesisStatus.PENDING
         ]
-        # Sort by priority descending for display
         pending.sort(key=lambda h: -h.priority)
 
         in_progress = [
-            h
-            for h in self._registry.values()
-            if h.status == HypothesisStatus.IN_PROGRESS
+            h for h in self._registry.values() if h.status == HypothesisStatus.IN_PROGRESS
         ]
-        confirmed = sum(
-            1 for h in self._registry.values() if h.status == HypothesisStatus.CONFIRMED
-        )
-        disproved = sum(
-            1 for h in self._registry.values() if h.status == HypothesisStatus.DISPROVED
+        exhausted = sum(
+            1
+            for h in self._registry.values()
+            if h.status in (HypothesisStatus.CONFIRMED, HypothesisStatus.DISPROVED)
         )
 
         total = len(self._registry)
-        lines.append(
-            f"Hypotheses: {total} total | {len(pending)} pending | "
-            f"{len(in_progress)} in-progress | {confirmed} confirmed | {disproved} disproved"
-        )
+        lines: list[str] = [
+            f"HYPOTHESIS QUEUE ({total} total, {exhausted} exhausted):"
+        ]
 
-        if in_progress:
-            lines.append("Testing now:")
-            for h in in_progress[:3]:
-                lines.append(
-                    f"  [TESTING] [{h.id}] pri={h.priority:.2f} ({h.category}): {h.statement[:80]}"
-                )
+        # In-progress hypotheses are shown first so the LLM can see what is
+        # already being tested and avoid duplicating effort.
+        for h in in_progress[:3]:
+            lines.append(
+                f"  [{h.priority:.2f}] {h.statement[:90]} [{h.category}] → IN PROGRESS"
+            )
 
+        # Top pending hypotheses with urgency labels
         top_pending = pending[:max_items]
-        if top_pending:
-            lines.append("Next to test:")
-            for h in top_pending:
-                lines.append(
-                    f"  [PENDING] [{h.id}] pri={h.priority:.2f} ({h.category}): {h.statement[:80]}"
-                )
+        for h in top_pending:
+            if h.priority >= 0.90:
+                urgency = "PURSUE NOW"
+            elif h.priority >= 0.75:
+                urgency = "PURSUE"
+            else:
+                urgency = "QUEUE"
+            lines.append(
+                f"  [{h.priority:.2f}] {h.statement[:90]} [{h.category}] → {urgency}"
+            )
 
         if not in_progress and not pending:
-            lines.append("Queue exhausted — no pending hypotheses.")
+            lines.append("  Queue exhausted — no pending hypotheses.")
+        else:
+            n_parallel = min(5, len(top_pending) + len(in_progress))
+            lines.append(
+                f"\nCOMMAND: Select {max(3, n_parallel - 1)}-{n_parallel} of the above"
+                " and call their corresponding tools in parallel."
+            )
 
         return "\n".join(lines)
 
