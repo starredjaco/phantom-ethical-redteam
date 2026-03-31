@@ -1,6 +1,16 @@
 #!/bin/bash
 set -e
 
+# --- Change to the directory containing this script ---
+cd "$(dirname "$0")"
+
+# --- Require root (needed to install system packages) ---
+if [ "$(id -u)" -ne 0 ]; then
+    echo "[ERROR] This installer must be run as root (use sudo)."
+    echo "        Run: sudo bash install.sh"
+    exit 1
+fi
+
 echo "========================================"
 echo "  Phantom – Ethical RedTeam"
 echo "  Installer v2.2.1"
@@ -301,8 +311,20 @@ echo ""
 echo "[ STEP 3 / 3 ] Installing dependencies"
 echo "-----------------------------------------"
 
-sudo apt update -q
-sudo apt install -y curl wget unzip git nmap sqlmap bettercap golang-go python3 python3-pip python3-venv
+# --- Detect package manager and install system deps ---
+if command -v apt &>/dev/null; then
+    apt update -q
+    apt install -y curl wget unzip git nmap sqlmap bettercap golang-go python3 python3-pip python3-venv
+elif command -v pacman &>/dev/null; then
+    pacman -Sy --noconfirm curl wget unzip git nmap python python-pip
+elif command -v dnf &>/dev/null; then
+    dnf install -y curl wget unzip git nmap python3 python3-pip
+elif command -v yum &>/dev/null; then
+    yum install -y curl wget unzip git nmap python3 python3-pip
+else
+    echo "[WARNING] No supported package manager found (apt/pacman/dnf/yum)."
+    echo "          Install manually: curl wget unzip git nmap python3 python3-pip python3-venv"
+fi
 
 # Default wordlist for ffuf (SecLists — directory-list-2.3-medium)
 mkdir -p wordlists

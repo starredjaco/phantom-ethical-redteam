@@ -4,14 +4,21 @@
 set -e
 
 REPO="https://github.com/kmdn-ch/phantom-ethical-redteam.git"
-DEST="$HOME/phantom"
+DEST="/opt/phantom"
 
 echo ""
 echo "========================================"
-echo "  Phantom – Ethical RedTeam"
+echo "  Phantom - Ethical RedTeam"
 echo "  One-line installer"
 echo "========================================"
 echo ""
+
+# --- Require root (needed to write to /opt) ---
+if [ "$(id -u)" -ne 0 ]; then
+    echo "[ERROR] This installer must be run as root (use sudo)."
+    echo "        Run: sudo bash <(curl -fsSL https://raw.githubusercontent.com/kmdn-ch/phantom-ethical-redteam/main/get.sh)"
+    exit 1
+fi
 
 # --- Check git ---
 if ! command -v git &>/dev/null; then
