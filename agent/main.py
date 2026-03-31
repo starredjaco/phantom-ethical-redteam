@@ -35,9 +35,15 @@ parser.add_argument(
     help="Resume a previous session (session directory name, e.g. 20260318_120000)",
 )
 parser.add_argument(
-    "--v3", action="store_true", help="Use v3 autonomous reasoning engine"
+    "--v3", action="store_true", default=True, help="Use v3 autonomous reasoning engine (default)"
+)
+parser.add_argument(
+    "--v2", action="store_true", help="Use v2 legacy linear loop (deprecated)"
 )
 args = parser.parse_args()
+# v3 is the default — v2 only if explicitly requested
+if args.v2:
+    args.v3 = False
 
 # --- Change to project root ---
 os.chdir(ROOT)

@@ -172,7 +172,7 @@ class AgentClient:
         self._turn_count += 1
         # Proactive context compaction based on estimated size
         estimated_tokens = self._estimate_tokens(messages) + len(system_prompt) // 4
-        logger.info(
+        logger.debug(
             "Turn %d — estimated context size: ~%d tokens",
             self._turn_count,
             estimated_tokens,

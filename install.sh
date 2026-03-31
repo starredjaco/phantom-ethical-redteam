@@ -394,4 +394,4 @@ if [ "$PROVIDER" != "ollama" ]; then
 fi
 export PATH="$PATH:$(pwd)/bin:/usr/local/bin"
 
-exec python3 agent/main.py
+exec python3 agent/main.py --v3

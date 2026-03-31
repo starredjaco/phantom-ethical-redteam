@@ -116,7 +116,7 @@ class OllamaProvider(BaseLLMProvider):
             if "<invoke" in full_text:
                 tool_calls = self._parse_xml_tool_calls(full_text)
                 if tool_calls:
-                    logger.info(
+                    logger.debug(
                         "Parsed %d XML-style tool call(s) from model output",
                         len(tool_calls),
                     )

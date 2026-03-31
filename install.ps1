@@ -441,4 +441,4 @@ if ($provider -ne "ollama") {
 }
 $env:PATH += ";$PWD\bin"
 
-& python "agent\main.py"
+& python "agent\main.py" --v3
