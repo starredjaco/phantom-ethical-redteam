@@ -1,5 +1,10 @@
 # Phantom - Ethical RedTeam
 
+> **ARCHIVED — 2026-04-03**
+> This project has been discontinued. It successfully demonstrated that AI can automate complex offensive security tasks autonomously. The approach has since been superseded by AI agents with dedicated skills, which achieve better results with less custom infrastructure. The code is preserved here as a proof-of-concept.
+
+---
+
 > An autonomous AI red team agent that thinks, adapts, and hacks like a real attacker.
 
 ![Phantom in action](images/phantom-banner.png)
